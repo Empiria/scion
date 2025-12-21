@@ -2,3 +2,4 @@
 .gswarm/agents/
 .gswarm_worktrees/
 gswarm
+TEST_GEMINI_KEY
