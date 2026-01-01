@@ -1,6 +1,14 @@
 # Scion
 
-Scion is a container-based orchestration tool for managing concurrent LLM-based code agents. It enables parallel execution of specialized sub-agents with isolated identities, credentials, and workspaces.
+Scion is a container-based orchestration tool designed to manage concurrent LLM-based code agents across your local machine and remote clusters. It enables developers to run specialized sub-agents with isolated identities, credentials, and workspaces, allowing for parallel execution of tasks such as coding, auditing, and testing.
+
+## Key Features
+
+- **Parallelism**: Run multiple agents concurrently as independent processes either locally or remote.
+- **Isolation**: Each agent runs in its own container with strict separation of credentials, configuration, and environment.
+- **Context Management**: Scion uses `git worktree` to provide each agent with a dedicated workspace, preventing merge conflicts and ensuring clean separation of concerns.
+- **Specialization**: Agents can be customized via templates (e.g., "Security Auditor", "QA Tester") to perform specific roles.
+- **Interactivity**: Agents support "detached" background operation, but users can "attach" to any running agent for human-in-the-loop interaction.
 
 ## Installation
 
@@ -12,33 +20,44 @@ go install github.com/ptone/scion-agent@latest
 
 Ensure that your `$GOPATH/bin` is in your system `$PATH`.
 
-## Concepts
+## Core Concepts
 
-- **Agent**: An isolated container running an LLM-driven task. Each agent has its own home directory, workspace, and credentials.
-- **Grove**: A "grove" is a project workspace where agents live. It corresponds to a `.scion` directory which contains agent configurations and templates. When initialized, it includes default templates for supported harnesses (`gemini`, `claude`).
+- **Agent**: An isolated container running an LLM-driven task. It acts as an independent worker with its own identity, credentials, and workspace.
+- **Grove**: A project workspace where agents live. It corresponds to a `.scion` directory on the filesystem (usually at the root of a git repository).
+- **Harness**: Adapts a specific underlying LLM tool (like Gemini CLI or Claude Code) into the Scion ecosystem, handling provisioning and execution inside a container.
 - **Template**: A blueprint for an agent, defining its base configuration, system prompt, and tools.
+- **Runtime**: The infrastructure layer responsible for executing agent containers (supports Docker, Apple Container, and experimental Kubernetes).
+
+## Architecture & Workspace Strategy
+
+Scion uses **Git Worktrees** to enable multiple agents to work on the same codebase simultaneously without conflicts.
+- When an agent starts, Scion creates a new git worktree for it.
+- This worktree creates a dedicated branch for the agent, ensuring independent working directories while sharing the same repository history.
+- The worktree is mounted into the agent's container as `/workspace`.
+
+### Resource Isolation
+Each agent is provisioned with:
+- **Dedicated Filesystem**: A unique home directory containing its unique settings and history.
+- **Credential Projection**: API keys and cloud credentials (e.g., Google Application Default Credentials) are securely projected into the container.
+- **Environment**: Environment variables are explicitly projected into the container.
 
 ## Quick Start
 
 ### 1. Initialize a Grove
 
-Navigate to your project root and initialize a new Scion grove. This creates the `.scion` directory structure and seeds default templates for supported harnesses (e.g., Gemini and Claude).
+Navigate to your project root and initialize a new Scion grove. This creates the `.scion` directory and seeds default templates.
 
 ```bash
 cd my-project
 scion grove init
 ```
 
-### 2. Provision and Start Agents
+### 2. Start Agents
 
-You can launch an agent immediately using `start` (or its alias `run`), or provision it first using `create` to customize it before execution.
-
-#### Option A: Quick Start (Immediate Execution)
-
-Launch a new agent to perform a specific task. By default, this runs in the background using the `gemini` template.
+You can launch an agent immediately using `start` (or its alias `run`). By default, this runs in the background using the `gemini` template.
 
 ```bash
-# Start a gemini agent named "coder" (uses gemini by default)
+# Start a gemini agent named "coder"
 scion start coder "Refactor the authentication middleware in pkg/auth"
 
 # Start a Claude-based agent
@@ -48,101 +67,32 @@ scion run auditor "Audit the user input validation" --type claude
 scion start debug "Help me debug this error" --attach
 ```
 
-#### Option B: Create-Then-Start (Customization Workflow)
+### 3. Manage Agents
 
-The `create` command allows you to provision an agent's directory structure without launching a container. This is useful for customizing an agent's environment or testing its behavior before it starts its task.
+- **List active agents**: `scion list`
+- **Attach to an agent**: `scion attach <agent-name>`
+- **View logs**: `scion logs <agent-name>`
+- **Stop an agent**: `scion stop <agent-name>`
+- **Delete an agent**: `scion delete <agent-name>` (removes container, directory, and worktree)
 
-1. **Create the agent:**
-   ```bash
-   scion create my-agent --type research-specialist
-   ```
+### 4. Customization Workflow (Create-Then-Start)
 
-2. **Customize the agent:**
-   Navigate to the agent's home directory to edit its configuration, system prompt, or provided tools:
-   ```bash
-   cd .scion/agents/my-agent/home
-   # Edit scion-agent.json, .gemini/system_prompt.md, etc.
-   ```
-
-3. **Start the agent:**
-   When you are ready, use `start` (or `run`) with the agent's name. Scion will detect the existing directory and use your customizations.
-   ```bash
-   scion start my-agent "Analyze the latest trends in quantum computing"
-   ```
-
-### 3. List Running Agents
-
-View all active agents in the current grove.
+The `create` command allows you to provision an agent's directory structure without launching it, allowing for manual customization of the system prompt or tools.
 
 ```bash
-scion list
+scion create my-agent --type research-specialist
+# Edit files in .scion/agents/my-agent/home/
+scion start my-agent "Analyze the codebase"
 ```
-
-To see agents across all groves:
-
-```bash
-scion list --all
-```
-
-### 4. Interact with an Agent
-
-You can attach to a running agent's interactive session (TTY).
-
-```bash
-scion attach coder
-```
-
-Use `Ctrl+P, Ctrl+Q` to detach without stopping the container (if using Docker/default runtime behavior), or simply exit the shell to stop the agent.
-
-### 5. View Logs
-
-Check the logs of a background agent.
-
-```bash
-scion logs coder
-```
-
-### 6. Stop and Cleanup
-
-Stop a running agent:
-
-```bash
-scion stop coder
-```
-
-Delete an agent (removes the container, agent directory, and git worktree):
-
-```bash
-scion delete coder
-```
-
-### 7. Manage Templates
-
-Templates serve as blueprints for new agents. You can manage them using the `templates` subcommand.
-
-- **List templates**:
-  ```bash
-  scion templates list
-  ```
-- **Create a new template**:
-  ```bash
-  scion templates create my-special-tpl
-  ```
-- **Delete a template**:
-  ```bash
-  scion templates delete my-special-tpl
-  ```
-- **Update default templates**:
-  ```bash
-  scion templates update-default
-  ```
-  *(Note: This restores or syncs the default `gemini` and `claude` templates with the latest defaults from the Scion binary.)*
-
-Use the `--global` flag with these commands to target the global template store in `~/.scion/templates`.
 
 ## Configuration
 
-Scion uses a `settings.json` file located in `~/.gemini/settings.json` for global configuration, such as API keys and auth preferences.
+Scion settings are managed in `settings.json` files, following a precedence order: **Grove** (`.scion/settings.json`) > **Global** (`~/.scion/settings.json`) > **Defaults**.
+
+Templates serve as blueprints and can be managed via the `templates` subcommand:
+- **List templates**: `scion templates list`
+- **Create a template**: `scion templates create <name>`
+- Use the `--global` flag to target the global template store in `~/.scion/templates`.
 
 ## License
 
