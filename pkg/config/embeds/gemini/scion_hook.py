@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import scion_tool
 
@@ -21,6 +22,15 @@ def main():
         state = "THINKING"
         prompt = input_data.get("prompt", "")
         log_msg = f"User prompt: {prompt[:100]}..." if prompt else "Planning turn"
+
+        if prompt:
+            prompt_path = os.path.join(scion_tool.HOME, "prompt.md")
+            if not os.path.exists(prompt_path) or os.path.getsize(prompt_path) == 0:
+                try:
+                    with open(prompt_path, "w") as f:
+                        f.write(prompt)
+                except Exception as e:
+                    scion_tool.log_event("ERROR", f"Failed to save prompt to {prompt_path}: {e}")
     elif event == "BeforeModel":
         state = "THINKING"
         log_msg = "LLM call started"
