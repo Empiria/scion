@@ -14,7 +14,31 @@ steps:
 
   # 1. Build Scion Base Image
   - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-scion-base'
+    id: 'build-scion-base-nopush'
+    dir: 'image-build/scion-base'
+    args:
+      - 'buildx'
+      - 'build'
+      - '--platform'
+      - 'linux/amd64,linux/arm64'
+      - '-t'
+      - '$_REGISTRY/scion-base:$SHORT_SHA'
+      - '-t'
+      - '$_REGISTRY/scion-base:latest'
+      - '-f'
+      - 'Dockerfile'
+      - '.'
+    env:
+      - 'DOCKER_CLI_EXPERIMENTAL=enabled'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'stop-builder'
+    args: ['buildx', 'stop', 'mybuilder']
+    env:
+      - 'DOCKER_CLI_EXPERIMENTAL=enabled'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-scion-base'
     dir: 'image-build/scion-base'
     args:
       - 'buildx'

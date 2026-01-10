@@ -15,19 +15,19 @@
   },
   "harnesses": {
     "gemini": {
-      "image": "us-central1-docker.pkg.dev/ptone-misc/public-docker/scion-gemini",
+      "image": "us-central1-docker.pkg.dev/ptone-misc/public-docker/scion-gemini:latest",
       "user": "node"
     },
     "claude": {
-      "image": "us-central1-docker.pkg.dev/ptone-misc/public-docker/scion-claude",
+      "image": "us-central1-docker.pkg.dev/ptone-misc/public-docker/scion-claude:latest",
       "user": "node"
     },
     "opencode": {
-      "image": "us-central1-docker.pkg.dev/user-content-search/public-docker/scion-opencode:latest",
+      "image": "us-central1-docker.pkg.dev/ptone-misc/public-docker/scion-opencode:latest",
       "user": "node"
     },
     "codex": {
-      "image": "us-central1-docker.pkg.dev/user-content-search/public-docker/scion-codex:latest",
+      "image": "us-central1-docker.pkg.dev/ptone-misc/public-docker/scion-codex:latest",
       "user": "node"
     }
   },
