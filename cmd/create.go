@@ -35,7 +35,7 @@ The agent will be created from a template.`,
 			Image:     agentImage,
 			GrovePath: grovePath,
 			Branch:    branch,
-			Workdir:   workdir,
+			Workspace: workspace,
 		}
 
 		// Check if container already exists
@@ -65,5 +65,5 @@ func init() {
 	createCmd.Flags().StringVarP(&templateName, "type", "t", "", "Template to use")
 	createCmd.Flags().StringVarP(&agentImage, "image", "i", "", "Container image to use (overrides template)")
 	createCmd.Flags().StringVarP(&branch, "branch", "b", "", "Git branch to use for the agent workspace")
-	createCmd.Flags().StringVar(&workdir, "workdir", "", "Host path to mount as /workspace (non-git environments only)")
+	createCmd.Flags().StringVarP(&workspace, "workspace", "w", "", "Host path to mount as /workspace")
 }

@@ -8,8 +8,8 @@ Scion provides flexible options for how this workspace is backed on your host ma
 
 When you start an agent, Scion determines its workspace based on the following precedence:
 
-1.  **Explicit Workspace** (`--workdir` flag):
-    If you provide a path via `--workdir`, Scion mounts that directory directly. This works in both Git and non-Git environments.
+1.  **Explicit Workspace** (`--workspace` flag):
+    If you provide a path via `--workspace`, Scion mounts that directory directly. This works in both Git and non-Git environments.
 
 2.  **Git Worktree** (Git repositories):
     If you are in a Git repository and do not provide an explicit workspace, Scion uses [Git Worktrees](https://git-scm.com/docs/git-worktree) to give the agent its own isolated working directory and branch.
@@ -19,7 +19,7 @@ When you start an agent, Scion determines its workspace based on the following p
 
 ---
 
-## 1. Explicit Workspaces (`--workdir`)
+## 1. Explicit Workspaces (`--workspace`)
 
 You can tell Scion exactly which directory to use as the workspace. This is useful for:
 - Working on a specific subfolder.
@@ -28,7 +28,7 @@ You can tell Scion exactly which directory to use as the workspace. This is usef
 
 ```bash
 # Mount a specific directory
-scion start my-agent "fix bugs" --workdir ./my-service
+scion start my-agent "fix bugs" --workspace ./my-service
 ```
 
 - **Behavior**: The specified directory is mounted directly to `/workspace`.
@@ -39,7 +39,7 @@ scion start my-agent "fix bugs" --workdir ./my-service
 
 ## 2. Git Worktrees (Automatic Isolation)
 
-When working inside a Git repository without an explicit `--workdir`, Scion automatically manages **Git Worktrees**. This ensures that each agent has its own isolated checkout of the code, allowing them to work on different branches simultaneously without interfering with your main working directory.
+When working inside a Git repository without an explicit `--workspace`, Scion automatically manages **Git Worktrees**. This ensures that each agent has its own isolated checkout of the code, allowing them to work on different branches simultaneously without interfering with your main working directory.
 
 ### Prerequisites
 - Git **2.47.0** or newer is required (for relative path support).
@@ -66,10 +66,6 @@ If you request a branch that is already checked out in another worktree (e.g., b
 - A warning is displayed: `Warning: Relying on existing worktree for branch '...'`.
 - This allows multiple agents to collaborate on the same branch/worktree if desired.
 
-### Location
-- **Home Directory**: `agents/<agent-name>/home/` (Config, logs, etc.)
-- **Workspace**: `agents/<agent-name>/workspace/` (The git worktree)
-
 ---
 
 ## 3. Non-Git Environments
@@ -92,6 +88,12 @@ scion cdw <agent-name>
 - Spawns a new shell inside the agent's workspace directory.
 - Works for both managed worktrees and manual mounts (if resolvable).
 
+Will also take a branch/worktree name outside of scion agents, most useful for getting back to main.
+
+```bash
+scion cdw <agent-name>
+```
+
 ## Cleanup
 
 When you delete an agent:
@@ -100,4 +102,4 @@ scion delete <agent-name>
 ```
 - **Worktrees**: The worktree directory is removed and git metadata is pruned.
 - **Branches**: By default, the branch is deleted. Use `--preserve-branch` (or `-b`) to keep it.
-- **Explicit Workspaces**: Directories mounted via `--workdir` are **NOT** deleted. Scion only cleans up resources it created.
+- **Explicit Workspaces**: Directories mounted via `--workspace` are **NOT** deleted. Scion only cleans up resources it created.

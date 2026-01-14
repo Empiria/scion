@@ -104,7 +104,7 @@ type StartOptions struct {
 	Auth      AuthProvider
 	NoAuth    bool
 	Branch    string
-	Workdir   string
+	Workspace string
 }
 
 type StatusEvent struct {
