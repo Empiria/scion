@@ -29,6 +29,9 @@ type ServerConfig struct {
 	CORSAllowedMethods []string
 	CORSAllowedHeaders []string
 	CORSMaxAge         int
+	// DevAuthToken is the development authentication token.
+	// If non-empty, development auth middleware is enabled.
+	DevAuthToken string
 }
 
 // DefaultServerConfig returns the default server configuration.
@@ -181,6 +184,10 @@ func (s *Server) applyMiddleware(h http.Handler) http.Handler {
 	// Apply middleware in reverse order (last applied runs first)
 	h = s.recoveryMiddleware(h)
 	h = s.loggingMiddleware(h)
+	// Apply dev auth middleware if configured
+	if s.config.DevAuthToken != "" {
+		h = DevAuthMiddleware(s.config.DevAuthToken)(h)
+	}
 	if s.config.CORSEnabled {
 		h = s.corsMiddleware(h)
 	}

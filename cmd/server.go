@@ -12,6 +12,7 @@ import (
 
 	"github.com/ptone/scion-agent/pkg/agent"
 	"github.com/ptone/scion-agent/pkg/api"
+	"github.com/ptone/scion-agent/pkg/apiclient"
 	"github.com/ptone/scion-agent/pkg/config"
 	"github.com/ptone/scion-agent/pkg/hub"
 	"github.com/ptone/scion-agent/pkg/runtime"
@@ -32,6 +33,7 @@ var (
 	enableRuntimeHost bool
 	runtimeHostPort   int
 	dbURL             string
+	enableDevAuth     bool
 )
 
 // serverCmd represents the server command
@@ -103,6 +105,9 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("runtime-host-port") {
 		cfg.RuntimeHost.Port = runtimeHostPort
 	}
+	if cmd.Flags().Changed("dev-auth") {
+		cfg.Auth.Enabled = enableDevAuth
+	}
 
 	// Check if at least one server is enabled
 	if !enableHub && !cfg.RuntimeHost.Enabled {
@@ -158,6 +163,31 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 	var hubSrv *hub.Server
 	var mgr agent.Manager
 
+	// Initialize dev auth if enabled
+	var devAuthToken string
+	if cfg.Auth.Enabled {
+		globalDir, err := config.GetGlobalDir()
+		if err != nil {
+			return fmt.Errorf("failed to get global directory: %w", err)
+		}
+
+		devAuthCfg := apiclient.DevAuthConfig{
+			Enabled:   cfg.Auth.Enabled,
+			Token:     cfg.Auth.Token,
+			TokenFile: cfg.Auth.TokenFile,
+		}
+
+		devAuthToken, err = apiclient.InitDevAuth(devAuthCfg, globalDir)
+		if err != nil {
+			return fmt.Errorf("failed to initialize dev auth: %w", err)
+		}
+
+		log.Println("WARNING: Development authentication enabled - not for production use")
+		log.Printf("Dev token: %s", devAuthToken)
+		log.Printf("To authenticate CLI commands, run:")
+		log.Printf("  export SCION_DEV_TOKEN=%s", devAuthToken)
+	}
+
 	// Start Hub API if enabled
 	if enableHub {
 		// Create Hub server configuration
@@ -171,6 +201,7 @@ func runServerStart(cmd *cobra.Command, args []string) error {
 			CORSAllowedMethods: cfg.Hub.CORSAllowedMethods,
 			CORSAllowedHeaders: cfg.Hub.CORSAllowedHeaders,
 			CORSMaxAge:         cfg.Hub.CORSMaxAge,
+			DevAuthToken:       devAuthToken,
 		}
 
 		// Create Hub server
@@ -486,4 +517,7 @@ func init() {
 	// Runtime Host API flags
 	serverStartCmd.Flags().BoolVar(&enableRuntimeHost, "enable-runtime-host", false, "Enable the Runtime Host API")
 	serverStartCmd.Flags().IntVar(&runtimeHostPort, "runtime-host-port", 9800, "Runtime Host API port")
+
+	// Auth flags
+	serverStartCmd.Flags().BoolVar(&enableDevAuth, "dev-auth", false, "Enable development authentication (auto-generates token)")
 }

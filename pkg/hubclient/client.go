@@ -159,3 +159,26 @@ func WithRetry(maxRetries int, wait time.Duration) Option {
 		c.transport.RetryWait = wait
 	}
 }
+
+// WithDevToken sets a development token for authentication.
+// This is equivalent to WithBearerToken but makes the intent clearer.
+func WithDevToken(token string) Option {
+	return func(c *client) {
+		c.transport.Auth = &apiclient.BearerAuth{Token: token}
+	}
+}
+
+// WithAutoDevAuth attempts to load a development token automatically.
+// It checks in order:
+// 1. SCION_DEV_TOKEN environment variable
+// 2. SCION_DEV_TOKEN_FILE environment variable (path to token file)
+// 3. Default token file (~/.scion/dev-token)
+// If no token is found, authentication is not configured.
+func WithAutoDevAuth() Option {
+	return func(c *client) {
+		token := apiclient.ResolveDevToken()
+		if token != "" {
+			c.transport.Auth = &apiclient.BearerAuth{Token: token}
+		}
+	}
+}

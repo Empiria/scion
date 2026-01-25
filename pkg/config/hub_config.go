@@ -70,6 +70,18 @@ type DatabaseConfig struct {
 	URL    string `json:"url" yaml:"url" koanf:"url"`          // Connection URL/path
 }
 
+// DevAuthConfig holds development authentication settings.
+type DevAuthConfig struct {
+	// Enabled indicates whether development authentication is enabled.
+	// WARNING: Not for production use.
+	Enabled bool `json:"devMode" yaml:"devMode" koanf:"devMode"`
+	// Token is an explicitly configured development token.
+	// If empty and Enabled=true, a token is auto-generated and persisted.
+	Token string `json:"devToken" yaml:"devToken" koanf:"devToken"`
+	// TokenFile is the path to the token file (default: ~/.scion/dev-token).
+	TokenFile string `json:"devTokenFile" yaml:"devTokenFile" koanf:"devTokenFile"`
+}
+
 // GlobalConfig holds the complete server configuration.
 // This is distinct from hub.ServerConfig which only holds HTTP server settings.
 type GlobalConfig struct {
@@ -81,6 +93,9 @@ type GlobalConfig struct {
 
 	// Database settings
 	Database DatabaseConfig `json:"database" yaml:"database" koanf:"database"`
+
+	// Authentication settings
+	Auth DevAuthConfig `json:"auth" yaml:"auth" koanf:"auth"`
 
 	// Logging settings
 	LogLevel  string `json:"logLevel" yaml:"logLevel" koanf:"logLevel"`
@@ -117,6 +132,11 @@ func DefaultGlobalConfig() GlobalConfig {
 		Database: DatabaseConfig{
 			Driver: "sqlite",
 			URL:    "", // Will be set to default path if empty
+		},
+		Auth: DevAuthConfig{
+			Enabled:   false,
+			Token:     "",
+			TokenFile: "", // Will default to ~/.scion/dev-token
 		},
 		LogLevel:  "info",
 		LogFormat: "text",
@@ -158,8 +178,12 @@ func LoadGlobalConfig(configPath string) (*GlobalConfig, error) {
 		// Database defaults
 		"database.driver": defaults.Database.Driver,
 		"database.url":    defaults.Database.URL,
-		"logLevel":        defaults.LogLevel,
-		"logFormat":       defaults.LogFormat,
+		// Auth defaults
+		"auth.devMode":      defaults.Auth.Enabled,
+		"auth.devToken":     defaults.Auth.Token,
+		"auth.devTokenFile": defaults.Auth.TokenFile,
+		"logLevel":          defaults.LogLevel,
+		"logFormat":         defaults.LogFormat,
 	}, "."), nil); err != nil {
 		return nil, err
 	}
