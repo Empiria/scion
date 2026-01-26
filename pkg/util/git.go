@@ -301,23 +301,34 @@ func ExtractRepoName(remoteURL string) string {
 	return remoteURL
 }
 
-// NormalizeGitRemote normalizes a git remote URL to a canonical form.
-// Converts SSH URLs to HTTPS format for consistent comparison.
-func NormalizeGitRemote(remoteURL string) string {
-	if remoteURL == "" {
+// NormalizeGitRemote normalizes a git remote URL to a canonical form for consistent matching.
+// It removes protocols (https, http, ssh, git), handles SSH format (git@host:path),
+// removes the .git suffix, and lowercases the host portion.
+// Examples:
+//   - https://github.com/org/repo.git -> github.com/org/repo
+//   - git@github.com:org/repo.git -> github.com/org/repo
+func NormalizeGitRemote(remote string) string {
+	if remote == "" {
 		return ""
 	}
 
-	// Remove trailing .git
-	remoteURL = strings.TrimSuffix(remoteURL, ".git")
+	// Lowercase for consistent prefix/suffix matching
+	remote = strings.ToLower(remote)
 
-	// Handle SSH format: git@github.com:org/repo -> https://github.com/org/repo
-	if strings.HasPrefix(remoteURL, "git@") {
-		// git@github.com:org/repo -> github.com/org/repo
-		remoteURL = strings.TrimPrefix(remoteURL, "git@")
-		remoteURL = strings.Replace(remoteURL, ":", "/", 1)
-		remoteURL = "https://" + remoteURL
+	// Remove protocol prefix
+	remote = strings.TrimPrefix(remote, "https://")
+	remote = strings.TrimPrefix(remote, "http://")
+	remote = strings.TrimPrefix(remote, "ssh://")
+	remote = strings.TrimPrefix(remote, "git://")
+
+	// Handle SSH format (git@host:path)
+	if strings.HasPrefix(remote, "git@") {
+		remote = strings.TrimPrefix(remote, "git@")
+		remote = strings.Replace(remote, ":", "/", 1)
 	}
 
-	return remoteURL
+	// Remove .git suffix
+	remote = strings.TrimSuffix(remote, ".git")
+
+	return remote
 }

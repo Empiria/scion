@@ -9,6 +9,7 @@ import (
 
 	"github.com/ptone/scion-agent/pkg/api"
 	"github.com/ptone/scion-agent/pkg/store"
+	"github.com/ptone/scion-agent/pkg/util"
 )
 
 // ============================================================================
@@ -494,7 +495,7 @@ func (s *Server) listGroves(w http.ResponseWriter, r *http.Request) {
 
 	filter := store.GroveFilter{
 		Visibility:      query.Get("visibility"),
-		GitRemotePrefix: query.Get("gitRemote"),
+		GitRemotePrefix: util.NormalizeGitRemote(query.Get("gitRemote")),
 		HostID:          query.Get("hostId"),
 	}
 
@@ -539,7 +540,7 @@ func (s *Server) createGrove(w http.ResponseWriter, r *http.Request) {
 		ID:         api.NewUUID(),
 		Name:       req.Name,
 		Slug:       api.Slugify(req.Name),
-		GitRemote:  normalizeGitRemote(req.GitRemote),
+		GitRemote:  util.NormalizeGitRemote(req.GitRemote),
 		Labels:     req.Labels,
 		Visibility: req.Visibility,
 	}
@@ -575,7 +576,7 @@ func (s *Server) handleGroveRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	normalizedRemote := normalizeGitRemote(req.GitRemote)
+	normalizedRemote := util.NormalizeGitRemote(req.GitRemote)
 
 	// Try to find existing grove
 	var grove *store.Grove
@@ -1863,38 +1864,4 @@ func (s *Server) getAvailableHostsForGrove(ctx context.Context, groveID string) 
 	}
 
 	return availableHosts, nil
-}
-
-// normalizeGitRemote normalizes a git remote URL for consistent matching.
-// Examples:
-//   - https://github.com/org/repo.git -> github.com/org/repo
-//   - git@github.com:org/repo.git -> github.com/org/repo
-func normalizeGitRemote(remote string) string {
-	if remote == "" {
-		return ""
-	}
-
-	// Remove protocol prefix
-	remote = strings.TrimPrefix(remote, "https://")
-	remote = strings.TrimPrefix(remote, "http://")
-	remote = strings.TrimPrefix(remote, "ssh://")
-	remote = strings.TrimPrefix(remote, "git://")
-
-	// Handle SSH format (git@host:path)
-	if strings.HasPrefix(remote, "git@") {
-		remote = strings.TrimPrefix(remote, "git@")
-		remote = strings.Replace(remote, ":", "/", 1)
-	}
-
-	// Remove .git suffix
-	remote = strings.TrimSuffix(remote, ".git")
-
-	// Lowercase the host portion
-	if idx := strings.Index(remote, "/"); idx != -1 {
-		host := strings.ToLower(remote[:idx])
-		path := remote[idx:]
-		remote = host + path
-	}
-
-	return remote
 }

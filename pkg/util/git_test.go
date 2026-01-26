@@ -179,4 +179,26 @@ func TestGitUtils(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("NormalizeGitRemote", func(t *testing.T) {
+		tests := []struct {
+			remote string
+			want   string
+		}{
+			{"https://github.com/ptone/scion.git", "github.com/ptone/scion"},
+			{"http://github.com/ptone/scion.git", "github.com/ptone/scion"},
+			{"git@github.com:ptone/scion.git", "github.com/ptone/scion"},
+			{"github.com/ptone/scion.git", "github.com/ptone/scion"},
+			{"git@github.com:ptone/scion", "github.com/ptone/scion"},
+			{"HTTPS://GITHUB.COM/ptone/scion.GIT", "github.com/ptone/scion"},
+			{"", ""},
+		}
+
+		for _, tt := range tests {
+			got := NormalizeGitRemote(tt.remote)
+			if got != tt.want {
+				t.Errorf("NormalizeGitRemote(%q) = %q, want %q", tt.remote, got, tt.want)
+			}
+		}
+	})
 }

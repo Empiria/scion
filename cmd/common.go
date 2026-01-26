@@ -101,7 +101,7 @@ func GetGroveIDFromGitRemote(hubCtx *HubContext) (string, error) {
 
 	// Look up groves by git remote
 	resp, err := hubCtx.Client.Groves().List(ctx, &hubclient.ListGrovesOptions{
-		GitRemote: gitRemote,
+		GitRemote: util.NormalizeGitRemote(gitRemote),
 	})
 	if err != nil {
 		return "", fmt.Errorf("failed to look up grove by git remote: %w", err)

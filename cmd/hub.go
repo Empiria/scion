@@ -360,7 +360,7 @@ func runHubRegister(cmd *cobra.Command, args []string) error {
 	// Build registration request
 	req := &hubclient.RegisterGroveRequest{
 		Name:      groveName,
-		GitRemote: gitRemote,
+		GitRemote: util.NormalizeGitRemote(gitRemote),
 		Path:      resolvedPath,
 		Mode:      hubRegisterMode,
 		Host: &hubclient.HostInfo{
