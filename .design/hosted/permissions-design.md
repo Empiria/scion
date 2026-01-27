@@ -50,6 +50,8 @@ A registered user account with identity and credentials.
 
 A collection of principals (users and/or other groups).
 
+> **Note:** The final permission check is always against a user, as only users take direct actions. When a user attempts a policy-guarded operation, their membership in any groups listed in the policy must be resolved via Ent graph traversals to determine effective access.
+
 ```json
 {
   "id": "group-uuid",
@@ -80,7 +82,8 @@ engineering (group)
     └── dave (user)
 ```
 
-A user inherits all permissions from all groups they belong to (directly or transitively).
+
+A user gains access to resources through policies attached to those resources (or their containing scopes). When a policy lists a group as a member, all users in that group (directly or transitively) are granted the policy's permissions.
 
 ### 2.2 Resources
 
@@ -94,6 +97,19 @@ Resources are the objects that policies protect. The key resources are:
 | `template` | An agent template | Hub or Grove |
 | `user` | A user account | Hub |
 | `group` | A user group | Hub |
+
+> **Decision: User-Scoped Templates**
+>
+> Templates can be personal to a user. Two approaches were considered:
+>
+> | Approach | Description | Pros | Cons |
+> |----------|-------------|------|------|
+> | **User as containment scope** | Add `user` as a containment scope alongside hub/grove | Clean hierarchy, user "owns" their templates | Adds complexity to scope resolution, third scope type |
+> | **Hub-level with user membership** | Store templates at hub level, add user as policy member | Simpler scope model, reuses existing patterns | Template ownership less explicit, querying user's templates requires policy traversal |
+>
+> **Decision:** Use hub-level storage with user membership for simplicity. User-scoped containment can be added later if the access patterns become unwieldy.
+>
+> **Note:** UX considerations for personal template management (discovery, listing, ownership display) will be addressed in later implementation phases.
 
 ### 2.3 Resource Scopes (Containment Hierarchy)
 
@@ -143,23 +159,23 @@ Actions represent operations that can be performed on resources. The system uses
 
 ### 2.5 Policies
 
-A **Policy** defines what actions a principal can perform on a resource or resource type.
+A **Policy** defines what actions principals can perform on resources within a scope. Each policy is attached to a single containment scope (hub, grove, or specific resource) and specifies which resource types and actions it governs within that scope.
+
+See [Section 4.3 Policy Data Model](#43-policy) for the detailed schema.
 
 ```json
 {
   "id": "policy-uuid",
   "name": "platform-team-grove-admin",
+  "description": "Full access to grove resources",
 
-  "principals": [
-    {"type": "group", "id": "platform-team-uuid"},
-    {"type": "user", "id": "specific-user-uuid"}
-  ],
+  // Scope attachment (single scope per policy)
+  "scopeType": "grove",
+  "scopeId": "grove-uuid",
 
-  "resources": {
-    "type": "grove",
-    "id": "grove-uuid",           // Specific resource (optional)
-    "scope": "grove"              // Scope level: hub, grove, or resource-id
-  },
+  // What resources this policy covers within the scope
+  "resourceType": "agent",        // Or "*" for all types
+  "resourceId": null,             // Optional: specific resource
 
   "actions": ["create", "read", "update", "delete", "manage"],
 
@@ -170,6 +186,8 @@ A **Policy** defines what actions a principal can perform on a resource or resou
   }
 }
 ```
+
+Principals are bound to policies via `PolicyBinding` records (see [Section 4.4](#44-policybinding)).
 
 ---
 
@@ -209,6 +227,8 @@ This means:
 
 ### 3.3 Resolution Algorithm
 
+> **Note:** This is an illustrative algorithm. The actual implementation may differ based on Ent query patterns and performance optimizations discovered during development.
+
 ```go
 func resolveAccess(ctx context.Context, principal Principal, resource Resource, action Action) Decision {
     log := authzLogger(ctx)
@@ -241,14 +261,7 @@ func resolveAccess(ctx context.Context, principal Principal, resource Resource, 
                     "effect", policy.Effect,
                     "decision", decision)
 
-                // Hard deny cannot be overridden
-                if policy.Effect == "hard_deny" {
-                    log.Info("access denied by hard deny policy",
-                        "policy", policy.ID,
-                        "principal", principal.ID,
-                        "resource", resource.ID)
-                    return Decision{Allowed: false, Reason: "hard_deny", Policy: policy}
-                }
+                // Future: hard_deny check would go here (see Section 3.4)
 
                 // Lower level overrides higher level
                 resolvedDecision = &Decision{
@@ -288,29 +301,18 @@ func resolveAccess(ctx context.Context, principal Principal, resource Resource, 
 |--------|----------|---------------|
 | `allow` | Grants access | Yes |
 | `deny` | Denies access | Yes (by lower-level allow) |
-| `hard_deny` | Denies access | No (terminal) |
 
-**Hard Deny** provides a mechanism for Hub admins to enforce restrictions that grove owners cannot override:
-
-```json
-{
-  "id": "no-prod-delete-policy",
-  "name": "Prevent production agent deletion",
-  "principals": [{"type": "group", "id": "everyone"}],
-  "resources": {"type": "agent"},
-  "actions": ["delete"],
-  "effect": "hard_deny",
-  "conditions": {
-    "labels": {"environment": "production"}
-  }
-}
-```
+> **Future Enhancement: Hard Deny**
+>
+> A `hard_deny` effect could provide Hub admins a mechanism to enforce restrictions that grove owners cannot override. This is documented in [Section 12.1](#121-policy-resolution-override-vs-least-privilege) as a potential future refinement. For initial implementation, the override model with standard `deny` is sufficient.
 
 ---
 
 ## 4. Data Models
 
 ### 4.1 Group
+
+> **Initial Proposal:** This schema may be refined based on [Ent traversal best practices](https://entgo.io/docs/traversals/) during implementation.
 
 ```go
 // Group represents a user group that can contain users and other groups.
@@ -378,7 +380,7 @@ type Policy struct {
     Actions      []string `json:"actions"`      // ["create", "read", "update", "delete", ...]
 
     // Effect
-    Effect string `json:"effect"` // "allow", "deny", "hard_deny"
+    Effect string `json:"effect"` // "allow", "deny" (future: "hard_deny")
 
     // Conditions (optional)
     Conditions *PolicyConditions `json:"conditions,omitempty"`
@@ -401,14 +403,24 @@ type Policy struct {
 
 ### 4.4 PolicyBinding
 
+Policies are attached to resources (or scopes) via the `Policy.ScopeType` and `Policy.ScopeID` fields (see [Section 4.3](#43-policy)). The `PolicyBinding` record links principals (users or groups) to a policy, granting those principals the permissions defined by the policy.
+
+This model supports many principals having access to the same resource through a single policy.
+
 ```go
-// PolicyBinding links a policy to principals.
+// PolicyBinding links principals to a policy.
+// The policy itself is attached to a resource/scope via its ScopeType and ScopeID fields.
 type PolicyBinding struct {
     PolicyID      string `json:"policyId"`      // FK to Policy.ID
     PrincipalType string `json:"principalType"` // "user" or "group"
     PrincipalID   string `json:"principalId"`   // FK to User.ID or Group.ID
 }
 ```
+
+**Lookup Pattern:** To find all principals with access to a resource:
+1. Find policies where `ScopeID` matches the resource (or its containing scope)
+2. Query `PolicyBinding` for all principals bound to those policies
+3. Expand group memberships to get individual users
 
 ### 4.5 PolicyConditions
 
@@ -499,7 +511,7 @@ func (Policy) Fields() []ent.Field {
         field.String("resource_id").Optional(),
         field.JSON("actions", []string{}),
 
-        field.Enum("effect").Values("allow", "deny", "hard_deny"),
+        field.Enum("effect").Values("allow", "deny"), // Future: add "hard_deny"
 
         field.JSON("conditions", &PolicyConditions{}).Optional(),
         field.Int("priority").Default(0),
@@ -1056,7 +1068,13 @@ type PolicyAuditEvent struct {
 | Complexity | Simpler mental model | Requires understanding all levels |
 | Revocation | Must delete/modify lower policy | Add deny at any level |
 
-**Decision:** Override model chosen for delegation flexibility. Hard deny provides an escape hatch for critical restrictions.
+**Decision:** Override model chosen for delegation flexibility.
+
+> **Future Improvement: Hard Deny**
+>
+> A `hard_deny` effect could be added to allow Hub admins to enforce restrictions that cannot be overridden by lower-level policies. This would provide an escape hatch for critical restrictions (e.g., preventing deletion of production agents) while maintaining the delegation benefits of the override model.
+>
+> Implementation would add a third effect type that short-circuits the resolution algorithm before override logic applies.
 
 ### 12.2 Group Hierarchy: Ent vs Custom Implementation
 
