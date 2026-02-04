@@ -1,12 +1,14 @@
 package hub
 
 import (
+	"bufio"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -730,6 +732,7 @@ func (s *Server) recoveryMiddleware(next http.Handler) http.Handler {
 }
 
 // responseWriter wraps http.ResponseWriter to capture status code.
+// It implements http.Hijacker to support WebSocket upgrades.
 type responseWriter struct {
 	http.ResponseWriter
 	statusCode int
@@ -738,6 +741,21 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack implements http.Hijacker for WebSocket support.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hj, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hj.Hijack()
+	}
+	return nil, nil, fmt.Errorf("hijack not supported")
+}
+
+// Flush implements http.Flusher for streaming support.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // logOAuthProviders logs which OAuth providers are configured for a client type.
