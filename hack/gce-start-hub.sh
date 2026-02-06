@@ -36,11 +36,12 @@ User=scion
 Group=scion
 WorkingDirectory=%s
 EnvironmentFile=/home/scion/.scion/hub.env
-Environment=\"PATH=/usr/local/bin:/usr/bin:/bin\"
+Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"
 # Use journald for log management
 StandardOutput=journal
 StandardError=journal
-ExecStart=%s --global server start --enable-hub --enable-runtime-host --port 9810 --runtime-host-port 9800
+ExecStartPre=/usr/bin/env
+ExecStart=%s --global server start --enable-hub --enable-runtime-broker --port 9810 --runtime-broker-port 9800
 Restart=always
 RestartSec=5
 
@@ -81,11 +82,23 @@ gcloud compute ssh "${INSTANCE_NAME}" --zone="${ZONE}" --command '
         sudo systemctl stop scion-hub
     fi
 
-    echo "Debug: Git version info:"
-    git version
-    which git
-    sudo -u scion git version
-    sudo -u scion which git
+    echo "=== Debug: Git Version Info ==="
+    echo "Current user ($(whoami)): $(git version) at $(which git)"
+    echo "Scion user: $(sudo -u scion git version) at $(sudo -u scion which git)"
+    echo "All git paths:"
+    whereis git
+    
+    # Try to find a git that is 2.47+ if the default one is not
+    GIT_BIN=$(which git)
+    if ! git version | grep -qE "git version 2\.(4[7-9]|[5-9][0-9])"; then
+        echo "Warning: Default git is old. Searching for newer git..."
+        for p in /usr/local/bin/git /usr/bin/git /bin/git; do
+            if [ -x "$p" ]; then
+                V=$("$p" version | cut -d" " -f3)
+                echo "Found $p with version $V"
+            fi
+        done
+    fi
 
     # 2. Update code as scion user
     echo "Updating repository..."

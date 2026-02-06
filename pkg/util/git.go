@@ -27,9 +27,13 @@ func IsGitRepoDir(dir string) bool {
 
 // GetGitVersion returns the git version string and the path to the git binary used.
 func GetGitVersion() (string, string, error) {
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		return "", "", err
+	gitPath := os.Getenv("SCION_GIT_BINARY")
+	if gitPath == "" {
+		var err error
+		gitPath, err = exec.LookPath("git")
+		if err != nil {
+			return "", "", err
+		}
 	}
 	cmd := exec.Command(gitPath, "--version")
 	output, err := cmd.CombinedOutput()
@@ -65,8 +69,12 @@ func CompareGitVersion(version string, minMajor, minMinor int) error {
 	}
 
 	var major, minor int
-	fmt.Sscanf(parts[0], "%d", &major)
-	fmt.Sscanf(parts[1], "%d", &minor)
+	if _, err := fmt.Sscanf(parts[0], "%d", &major); err != nil {
+		return fmt.Errorf("failed to parse git major version from %s: %w", parts[0], err)
+	}
+	if _, err := fmt.Sscanf(parts[1], "%d", &minor); err != nil {
+		return fmt.Errorf("failed to parse git minor version from %s: %w", parts[1], err)
+	}
 
 	if major < minMajor || (major == minMajor && minor < minMinor) {
 		return fmt.Errorf("version %s is less than %d.%d", version, minMajor, minMinor)
