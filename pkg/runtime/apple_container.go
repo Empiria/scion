@@ -148,8 +148,7 @@ func (r *AppleContainerRuntime) Attach(ctx context.Context, id string) error {
 	}
 
 	if a.Labels["scion.tmux"] == "true" {
-		// container exec -it <id> tmux attach -t scion
-		return runInteractiveCommand(r.Command, "exec", "-it", a.ID, "tmux", "attach", "-t", "scion")
+		return runInteractiveCommand(r.Command, "exec", "-it", "--user", "scion", a.ID, "tmux", "attach", "-t", "scion")
 	}
 
 	return fmt.Errorf("apple container runtime does not support 'attach' without tmux")
@@ -173,7 +172,7 @@ func (r *AppleContainerRuntime) Sync(ctx context.Context, id string, direction S
 }
 
 func (r *AppleContainerRuntime) Exec(ctx context.Context, id string, cmd []string) (string, error) {
-	args := append([]string{"exec", id}, cmd...)
+	args := append([]string{"exec", "--user", "scion", id}, cmd...)
 	return runSimpleCommand(ctx, r.Command, args...)
 }
 
