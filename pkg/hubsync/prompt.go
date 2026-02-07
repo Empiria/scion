@@ -313,3 +313,39 @@ func ShowGroveContributorPrompt(groveName string, autoConfirm bool) bool {
 	fmt.Println("This will allow the broker to execute agents for this grove.")
 	return ConfirmAction("Continue?", true, autoConfirm)
 }
+
+// ShowCheckHubAnywayPrompt asks if user wants to check Hub even though it's disabled.
+// Returns true if the user wants to check, false otherwise.
+func ShowCheckHubAnywayPrompt(autoConfirm bool) bool {
+	fmt.Println()
+	fmt.Println("Hub integration is disabled for this grove.")
+	return ConfirmAction("Check Hub status anyway?", false, autoConfirm)
+}
+
+// ShowCleanUnlinkPrompt asks if user wants to unlink from Hub before cleaning.
+// Returns true if the user confirms, false otherwise.
+func ShowCleanUnlinkPrompt(groveName string, autoConfirm bool) bool {
+	fmt.Println()
+	fmt.Println("The grove will be unlinked from the Hub locally.")
+	fmt.Println("The grove and its agents will remain on the Hub for other brokers.")
+	return ConfirmAction("Unlink from Hub before cleaning?", true, autoConfirm)
+}
+
+// ShowCleanConfirmPrompt displays the final confirmation for cleaning a grove.
+// Returns true if the user confirms, false otherwise.
+func ShowCleanConfirmPrompt(groveName, grovePath string, isGlobal bool, autoConfirm bool) bool {
+	fmt.Println()
+	fmt.Println("This will permanently remove the scion configuration:")
+	fmt.Printf("  Grove: %s\n", groveName)
+	fmt.Printf("  Path:  %s\n", grovePath)
+	if isGlobal {
+		fmt.Println("  Type:  global")
+	} else {
+		fmt.Println("  Type:  project")
+	}
+	fmt.Println()
+	fmt.Println("This action cannot be undone. Agent configurations will be lost.")
+	fmt.Println()
+	// Default NO for safety - destructive operation
+	return ConfirmAction("Remove scion grove?", false, autoConfirm)
+}
