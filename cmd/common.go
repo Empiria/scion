@@ -240,7 +240,7 @@ func RunAgent(cmd *cobra.Command, args []string, resume bool) error {
 					isRunning := strings.HasPrefix(status, "up") || status == "running"
 					if isRunning {
 						fmt.Printf("Agent '%s' is already running. Attaching...\n", agentName)
-						return rt.Attach(context.Background(), a.ID)
+						return rt.Attach(context.Background(), agentName)
 					}
 				}
 			}
@@ -295,7 +295,7 @@ func RunAgent(cmd *cobra.Command, args []string, resume bool) error {
 
 	if !info.Detached {
 		fmt.Printf("Attaching to agent '%s'...\n", agentName)
-		return rt.Attach(context.Background(), info.ID)
+		return rt.Attach(context.Background(), agentName)
 	}
 
 	displayStatus := "launched"
