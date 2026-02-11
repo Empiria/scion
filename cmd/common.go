@@ -409,6 +409,9 @@ func startAgentViaHub(hubCtx *HubContext, agentName, task string, resume bool) e
 		return wrapHubError(fmt.Errorf("failed to start agent via Hub: %w", err))
 	}
 
+	// Print info line when broker was auto-resolved (not explicitly specified)
+	printAutoResolvedBroker(ctx, hubCtx, runtimeBrokerID, req.RuntimeBrokerID, resp)
+
 	// Workspace bootstrap: upload files and finalize
 	if len(resp.UploadURLs) > 0 && len(workspaceFiles) > 0 {
 		tc := transfer.NewClient(nil)
@@ -632,5 +635,31 @@ func createAgentWithBrokerResolution(ctx context.Context, hubCtx *HubContext, gr
 			}
 		}
 		// Loop and retry with selected broker
+	}
+}
+
+// printAutoResolvedBroker prints an info line when the broker was auto-resolved
+// (i.e., the user didn't explicitly pass --broker and didn't interactively select one).
+// This covers the "default broker" and "single provider" auto-selection cases.
+func printAutoResolvedBroker(ctx context.Context, hubCtx *HubContext, flagBrokerID, reqBrokerID string, resp *hubclient.CreateAgentResponse) {
+	// Only print when the broker was auto-resolved (not explicitly specified or interactively selected)
+	if flagBrokerID != "" || reqBrokerID != "" {
+		return
+	}
+	if resp == nil || resp.Agent == nil || resp.Agent.RuntimeBrokerID == "" {
+		return
+	}
+
+	brokerName := resp.Agent.RuntimeBrokerName
+	if brokerName == "" {
+		// Fallback: fetch broker name from Hub
+		if broker, err := hubCtx.Client.RuntimeBrokers().Get(ctx, resp.Agent.RuntimeBrokerID); err == nil {
+			brokerName = broker.Name
+		}
+	}
+	if brokerName != "" {
+		fmt.Printf("Using default broker %s\n", brokerName)
+	} else {
+		fmt.Printf("Using default broker %s\n", resp.Agent.RuntimeBrokerID)
 	}
 }
