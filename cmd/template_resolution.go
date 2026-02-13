@@ -239,6 +239,14 @@ func handleHubAndLocalTemplate(ctx context.Context, hubCtx *HubContext, hubTempl
 
 // handleLocalOnlyTemplate handles the case where template exists only locally.
 func handleLocalOnlyTemplate(ctx context.Context, hubCtx *HubContext, localTemplate *config.Template, scope, groveID string) (*TemplateResolutionResult, error) {
+	// Check if the target broker has local filesystem access to the grove.
+	// If so, the broker can resolve the template locally — no upload needed.
+	if brokerHasLocalAccess(ctx, hubCtx, groveID) {
+		return &TemplateResolutionResult{
+			TemplateName: localTemplate.Name,
+		}, nil
+	}
+
 	// Check flags
 	if noUpload {
 		return nil, fmt.Errorf("template '%s' exists locally but not on Hub, and --no-upload is set\n\n"+
@@ -263,6 +271,28 @@ func handleLocalOnlyTemplate(ctx context.Context, hubCtx *HubContext, localTempl
 
 	// Interactive prompt
 	return promptForLocalTemplateUpload(ctx, hubCtx, localTemplate, scope, groveID, harnessType)
+}
+
+// brokerHasLocalAccess checks whether the target broker has local filesystem
+// access to the grove. If so, the broker can resolve templates locally without
+// requiring them to be uploaded to the Hub.
+func brokerHasLocalAccess(ctx context.Context, hubCtx *HubContext, groveID string) bool {
+	if hubCtx.BrokerID == "" || groveID == "" {
+		return false
+	}
+
+	providers, err := hubCtx.Client.Groves().ListProviders(ctx, groveID)
+	if err != nil || providers == nil {
+		return false
+	}
+
+	for _, p := range providers.Providers {
+		if p.BrokerID == hubCtx.BrokerID && p.LocalPath != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // promptForLocalTemplateUpload prompts the user to upload a local-only template.

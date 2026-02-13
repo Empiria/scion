@@ -15,7 +15,13 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+
+	"github.com/ptone/scion-agent/pkg/hubclient"
 )
 
 func TestParseTemplateScope(t *testing.T) {
@@ -190,4 +196,154 @@ func containsHelper(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestBrokerHasLocalAccess(t *testing.T) {
+	const groveID = "grove-123"
+	const brokerID = "broker-456"
+
+	t.Run("returns true when broker has local path", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Path == "/api/v1/groves/"+groveID+"/providers" && r.Method == http.MethodGet {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"providers": []map[string]interface{}{
+						{
+							"brokerId":   brokerID,
+							"brokerName": "local-broker",
+							"localPath":  "/home/user/project/.scion",
+							"status":     "online",
+						},
+					},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		client, err := hubclient.New(server.URL)
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		hubCtx := &HubContext{
+			Client:   client,
+			BrokerID: brokerID,
+		}
+
+		if !brokerHasLocalAccess(context.Background(), hubCtx, groveID) {
+			t.Error("expected brokerHasLocalAccess to return true for broker with local path")
+		}
+	})
+
+	t.Run("returns false when broker has no local path", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Path == "/api/v1/groves/"+groveID+"/providers" && r.Method == http.MethodGet {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"providers": []map[string]interface{}{
+						{
+							"brokerId":   brokerID,
+							"brokerName": "remote-broker",
+							"status":     "online",
+						},
+					},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		client, err := hubclient.New(server.URL)
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		hubCtx := &HubContext{
+			Client:   client,
+			BrokerID: brokerID,
+		}
+
+		if brokerHasLocalAccess(context.Background(), hubCtx, groveID) {
+			t.Error("expected brokerHasLocalAccess to return false for broker without local path")
+		}
+	})
+
+	t.Run("returns false when broker ID does not match", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if r.URL.Path == "/api/v1/groves/"+groveID+"/providers" && r.Method == http.MethodGet {
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"providers": []map[string]interface{}{
+						{
+							"brokerId":   "other-broker",
+							"brokerName": "other",
+							"localPath":  "/some/path",
+							"status":     "online",
+						},
+					},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		client, err := hubclient.New(server.URL)
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		hubCtx := &HubContext{
+			Client:   client,
+			BrokerID: brokerID,
+		}
+
+		if brokerHasLocalAccess(context.Background(), hubCtx, groveID) {
+			t.Error("expected brokerHasLocalAccess to return false when broker ID doesn't match")
+		}
+	})
+
+	t.Run("returns false when no broker ID set", func(t *testing.T) {
+		hubCtx := &HubContext{
+			BrokerID: "",
+		}
+
+		if brokerHasLocalAccess(context.Background(), hubCtx, groveID) {
+			t.Error("expected brokerHasLocalAccess to return false when no broker ID is set")
+		}
+	})
+
+	t.Run("returns false when no grove ID", func(t *testing.T) {
+		hubCtx := &HubContext{
+			BrokerID: brokerID,
+		}
+
+		if brokerHasLocalAccess(context.Background(), hubCtx, "") {
+			t.Error("expected brokerHasLocalAccess to return false when no grove ID is provided")
+		}
+	})
+
+	t.Run("returns false when API returns error", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer server.Close()
+
+		client, err := hubclient.New(server.URL)
+		if err != nil {
+			t.Fatalf("failed to create client: %v", err)
+		}
+
+		hubCtx := &HubContext{
+			Client:   client,
+			BrokerID: brokerID,
+		}
+
+		if brokerHasLocalAccess(context.Background(), hubCtx, groveID) {
+			t.Error("expected brokerHasLocalAccess to return false when API returns error")
+		}
+	})
 }

@@ -936,3 +936,148 @@ func TestCreateAgent_RecreateFromStoppedStatus(t *testing.T) {
 	_, err := s.GetAgent(ctx, "agent-stopped")
 	assert.ErrorIs(t, err, store.ErrNotFound, "old stopped agent should be deleted")
 }
+
+// TestAgentCreate_LocalTemplateWithLocalBroker tests that agent creation succeeds
+// when a template is not found on the Hub but the target broker has local filesystem
+// access (LocalPath is set), allowing the template to be resolved locally by the broker.
+func TestAgentCreate_LocalTemplateWithLocalBroker(t *testing.T) {
+	srv, s := testServer(t)
+	ctx := context.Background()
+
+	// Create a runtime broker
+	broker := &store.RuntimeBroker{
+		ID:     "broker_local_tpl",
+		Slug:   "local-tpl-broker",
+		Name:   "Local Template Broker",
+		Status: store.BrokerStatusOnline,
+	}
+	require.NoError(t, s.CreateRuntimeBroker(ctx, broker))
+
+	// Create a grove with default runtime broker
+	grove := &store.Grove{
+		ID:                     "grove_local_tpl",
+		Slug:                   "local-tpl-grove",
+		Name:                   "Local Template Grove",
+		GitRemote:              "github.com/test/local-tpl",
+		DefaultRuntimeBrokerID: broker.ID,
+		Created:                time.Now(),
+		Updated:                time.Now(),
+	}
+	require.NoError(t, s.CreateGrove(ctx, grove))
+
+	// Register the broker as a provider WITH a local path
+	provider := &store.GroveProvider{
+		GroveID:    grove.ID,
+		BrokerID:   broker.ID,
+		BrokerName: broker.Name,
+		LocalPath:  "/home/user/project/.scion",
+		Status:     store.BrokerStatusOnline,
+	}
+	require.NoError(t, s.AddGroveProvider(ctx, provider))
+
+	// Create agent with a template name that does NOT exist on the Hub.
+	// Because the broker has a LocalPath, this should succeed.
+	body := map[string]interface{}{
+		"name":     "Local Template Agent",
+		"groveId":  grove.ID,
+		"template": "my-local-template",
+	}
+
+	rec := doRequest(t, srv, http.MethodPost, "/api/v1/agents", body)
+
+	assert.Equal(t, http.StatusCreated, rec.Code, "expected 201 when broker has local access, got %d: %s", rec.Code, rec.Body.String())
+
+	var resp CreateAgentResponse
+	require.NoError(t, json.NewDecoder(rec.Body).Decode(&resp))
+	require.NotNil(t, resp.Agent)
+	assert.Equal(t, "local-template-agent", resp.Agent.Slug)
+	assert.Equal(t, "my-local-template", resp.Agent.Template)
+	// The harness should fall back to the template name when resolvedTemplate is nil
+	require.NotNil(t, resp.Agent.AppliedConfig)
+	assert.Equal(t, "my-local-template", resp.Agent.AppliedConfig.Harness)
+	// TemplateID and TemplateHash should be empty since template was not resolved on Hub
+	assert.Empty(t, resp.Agent.AppliedConfig.TemplateID)
+	assert.Empty(t, resp.Agent.AppliedConfig.TemplateHash)
+}
+
+// TestAgentCreate_LocalTemplateWithRemoteBroker tests that agent creation returns
+// NotFound when a template is not on the Hub and the broker does NOT have local access.
+func TestAgentCreate_LocalTemplateWithRemoteBroker(t *testing.T) {
+	srv, s := testServer(t)
+	ctx := context.Background()
+
+	// Create a runtime broker
+	broker := &store.RuntimeBroker{
+		ID:     "broker_remote_tpl",
+		Slug:   "remote-tpl-broker",
+		Name:   "Remote Template Broker",
+		Status: store.BrokerStatusOnline,
+	}
+	require.NoError(t, s.CreateRuntimeBroker(ctx, broker))
+
+	// Create a grove
+	grove := &store.Grove{
+		ID:                     "grove_remote_tpl",
+		Slug:                   "remote-tpl-grove",
+		Name:                   "Remote Template Grove",
+		GitRemote:              "github.com/test/remote-tpl",
+		DefaultRuntimeBrokerID: broker.ID,
+		Created:                time.Now(),
+		Updated:                time.Now(),
+	}
+	require.NoError(t, s.CreateGrove(ctx, grove))
+
+	// Register the broker as a provider WITHOUT a local path
+	provider := &store.GroveProvider{
+		GroveID:    grove.ID,
+		BrokerID:   broker.ID,
+		BrokerName: broker.Name,
+		Status:     store.BrokerStatusOnline,
+		// Note: LocalPath is NOT set — broker has no local access
+	}
+	require.NoError(t, s.AddGroveProvider(ctx, provider))
+
+	// Create agent with a template name that does NOT exist on the Hub.
+	// Without local access, this should fail with NotFound.
+	body := map[string]interface{}{
+		"name":     "Remote Template Agent",
+		"groveId":  grove.ID,
+		"template": "nonexistent-template",
+	}
+
+	rec := doRequest(t, srv, http.MethodPost, "/api/v1/agents", body)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code, "expected 404 when template not on Hub and broker has no local access")
+}
+
+// TestAgentCreate_LocalTemplateNoBroker tests that agent creation fails when a
+// template is not on the Hub and there is no runtime broker assigned. The error
+// occurs because no broker is available (before template resolution is reached).
+func TestAgentCreate_LocalTemplateNoBroker(t *testing.T) {
+	srv, s := testServer(t)
+	ctx := context.Background()
+
+	// Create a grove WITHOUT a default runtime broker
+	grove := &store.Grove{
+		ID:        "grove_no_broker_tpl",
+		Slug:      "no-broker-tpl-grove",
+		Name:      "No Broker Template Grove",
+		GitRemote: "github.com/test/no-broker-tpl",
+		Created:   time.Now(),
+		Updated:   time.Now(),
+	}
+	require.NoError(t, s.CreateGrove(ctx, grove))
+
+	// Create agent with a template name that does NOT exist on the Hub.
+	// Without any broker, this should fail (422 validation error for missing broker).
+	body := map[string]interface{}{
+		"name":     "No Broker Agent",
+		"groveId":  grove.ID,
+		"template": "nonexistent-template",
+	}
+
+	rec := doRequest(t, srv, http.MethodPost, "/api/v1/agents", body)
+
+	// Expect a client error — the broker resolution fails before template resolution
+	assert.True(t, rec.Code >= 400 && rec.Code < 500, "expected client error when no broker assigned, got %d", rec.Code)
+}

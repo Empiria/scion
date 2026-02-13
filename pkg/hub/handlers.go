@@ -371,10 +371,20 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 			writeErrorFromErr(w, err, "")
 			return
 		}
-		// If template was requested but not found, return an error
+		// If template was requested but not found, check if the broker has local access
 		if resolvedTemplate == nil {
-			NotFound(w, "Template")
-			return
+			brokerHasLocal := false
+			if runtimeBrokerID != "" {
+				provider, err := s.store.GetGroveProvider(ctx, req.GroveID, runtimeBrokerID)
+				if err == nil && provider.LocalPath != "" {
+					brokerHasLocal = true
+				}
+			}
+			if !brokerHasLocal {
+				NotFound(w, "Template")
+				return
+			}
+			// Template will be resolved locally by the broker
 		}
 	}
 
@@ -1730,10 +1740,20 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 			writeErrorFromErr(w, err, "")
 			return
 		}
-		// If template was requested but not found, return an error
+		// If template was requested but not found, check if the broker has local access
 		if resolvedTemplate == nil {
-			NotFound(w, "Template")
-			return
+			brokerHasLocal := false
+			if runtimeBrokerID != "" {
+				provider, err := s.store.GetGroveProvider(ctx, groveID, runtimeBrokerID)
+				if err == nil && provider.LocalPath != "" {
+					brokerHasLocal = true
+				}
+			}
+			if !brokerHasLocal {
+				NotFound(w, "Template")
+				return
+			}
+			// Template will be resolved locally by the broker
 		}
 	}
 
