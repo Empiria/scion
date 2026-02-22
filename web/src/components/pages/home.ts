@@ -269,7 +269,7 @@ export class ScionPageHome extends LitElement {
 
       <h2 class="section-title">Quick Actions</h2>
       <div class="quick-actions">
-        <a href="/agents" class="action-card">
+        <a href="/agents/new" class="action-card">
           <div class="action-icon">
             <sl-icon name="plus-lg"></sl-icon>
           </div>
@@ -304,10 +304,12 @@ export class ScionPageHome extends LitElement {
           <div class="empty-state">
             <sl-icon name="clock-history"></sl-icon>
             <p>No recent activity to display.<br />Start by creating your first agent.</p>
-            <sl-button variant="primary" href="/agents" style="margin-top: 1rem;">
-              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-              Create Agent
-            </sl-button>
+            <a href="/agents/new" style="text-decoration: none; margin-top: 1rem; display: inline-block;">
+              <sl-button variant="primary">
+                <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+                Create Agent
+              </sl-button>
+            </a>
           </div>
         </div>
       </div>

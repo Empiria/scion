@@ -93,7 +93,24 @@ export interface Agent {
   template: string;
   status: AgentStatus;
   taskSummary?: string;
+  message?: string;
   lastSeen?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Template information from the Hub API
+ */
+export interface Template {
+  id: string;
+  name: string;
+  slug: string;
+  displayName?: string;
+  description?: string;
+  harness: string;
+  status: string;
+  scope: string;
   createdAt: string;
   updatedAt: string;
 }

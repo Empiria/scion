@@ -345,10 +345,12 @@ export class ScionPageAgents extends LitElement {
     return html`
       <div class="header">
         <h1>Agents</h1>
-        <sl-button variant="primary" size="small" disabled>
-          <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-          New Agent
-        </sl-button>
+        <a href="/agents/new" style="text-decoration: none;">
+          <sl-button variant="primary" size="small">
+            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+            New Agent
+          </sl-button>
+        </a>
       </div>
 
       ${this.loading ? this.renderLoading() : this.error ? this.renderError() : this.renderAgents()}
@@ -398,10 +400,12 @@ export class ScionPageAgents extends LitElement {
           Agents are AI-powered workers that can help you with coding tasks. Create your first agent
           to get started.
         </p>
-        <sl-button variant="primary" disabled>
-          <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-          Create Agent
-        </sl-button>
+        <a href="/agents/new" style="text-decoration: none;">
+          <sl-button variant="primary">
+            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+            Create Agent
+          </sl-button>
+        </a>
       </div>
     `;
   }

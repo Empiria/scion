@@ -344,6 +344,43 @@ export class ScionPageAgentDetail extends LitElement {
       color: var(--sl-color-danger-700, #b91c1c);
       margin-bottom: 1rem;
     }
+
+    .agent-error-banner {
+      background: var(--sl-color-danger-50, #fef2f2);
+      border: 1px solid var(--sl-color-danger-200, #fecaca);
+      border-radius: var(--scion-radius-lg, 0.75rem);
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .agent-error-banner sl-icon {
+      color: var(--sl-color-danger-500, #ef4444);
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      margin-top: 0.125rem;
+    }
+
+    .agent-error-banner .error-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .agent-error-banner .error-title {
+      font-weight: 600;
+      color: var(--sl-color-danger-700, #b91c1c);
+      margin-bottom: 0.25rem;
+    }
+
+    .agent-error-banner .error-message {
+      font-size: 0.875rem;
+      color: var(--sl-color-danger-600, #dc2626);
+      font-family: var(--scion-font-mono, monospace);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   `;
 
   private boundOnAgentsUpdated = this.onAgentsUpdated.bind(this);
@@ -632,6 +669,18 @@ export class ScionPageAgentDetail extends LitElement {
           </sl-button>
         </div>
       </div>
+
+      ${this.agent.status === 'error' && this.agent.message
+        ? html`
+            <div class="agent-error-banner">
+              <sl-icon name="exclamation-octagon"></sl-icon>
+              <div class="error-content">
+                <div class="error-title">Agent Error</div>
+                <div class="error-message">${this.agent.message}</div>
+              </div>
+            </div>
+          `
+        : ''}
 
       <!-- Quick Actions -->
       <div class="quick-actions" style="margin-bottom: 1.5rem;">

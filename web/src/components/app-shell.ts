@@ -223,6 +223,9 @@ export class ScionApp extends LitElement {
     if (this.currentPath.startsWith('/groves/')) {
       return 'Grove Details';
     }
+    if (this.currentPath === '/agents/new') {
+      return 'Create Agent';
+    }
     if (this.currentPath.startsWith('/agents/')) {
       // Check if it's the terminal page
       if (this.currentPath.includes('/terminal')) {

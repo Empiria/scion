@@ -532,10 +532,12 @@ export class ScionPageGroveDetail extends LitElement {
           <div class="header-path">${this.grove.path}</div>
         </div>
         <div class="header-actions">
-          <sl-button variant="primary" size="small" disabled>
-            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-            New Agent
-          </sl-button>
+          <a href="/agents/new?groveId=${this.groveId}" style="text-decoration: none;">
+            <sl-button variant="primary" size="small">
+              <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+              New Agent
+            </sl-button>
+          </a>
           <sl-button size="small" disabled>
             <sl-icon slot="prefix" name="gear"></sl-icon>
             Settings
@@ -611,10 +613,12 @@ export class ScionPageGroveDetail extends LitElement {
         <sl-icon name="cpu"></sl-icon>
         <h2>No Agents</h2>
         <p>This grove doesn't have any agents yet. Create your first agent to get started.</p>
-        <sl-button variant="primary" disabled>
-          <sl-icon slot="prefix" name="plus-lg"></sl-icon>
-          Create Agent
-        </sl-button>
+        <a href="/agents/new?groveId=${this.groveId}" style="text-decoration: none;">
+          <sl-button variant="primary">
+            <sl-icon slot="prefix" name="plus-lg"></sl-icon>
+            Create Agent
+          </sl-button>
+        </a>
       </div>
     `;
   }
