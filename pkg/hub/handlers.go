@@ -344,80 +344,13 @@ func (s *Server) createAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if existingAgent != nil && !req.ProvisionOnly &&
-		(existingAgent.Status == store.AgentStatusRunning ||
-			existingAgent.Status == store.AgentStatusStopped ||
-			existingAgent.Status == store.AgentStatusError) {
-		// Agent exists in a potentially stale state â delete and recreate
-		dispatcher := s.GetDispatcher()
-		if dispatcher != nil && existingAgent.RuntimeBrokerID != "" {
-			_ = dispatcher.DispatchAgentDelete(ctx, existingAgent, false, false, false, time.Time{})
-		}
-		if err := s.store.DeleteAgent(ctx, existingAgent.ID); err != nil {
-			writeErrorFromErr(w, err, "")
-			return
-		}
-		existingAgent = nil // Fall through to create new agent below
-	}
-
-	// If the agent is stuck in "provisioning" (e.g. env-gather was cancelled by the user)
-	// and the new request wants env-gather, delete the stale agent so a fresh
-	// env-gather flow runs from scratch.
-	if existingAgent != nil && req.GatherEnv &&
-		existingAgent.Status == store.AgentStatusProvisioning {
-		dispatcher := s.GetDispatcher()
-		if dispatcher != nil && existingAgent.RuntimeBrokerID != "" {
-			_ = dispatcher.DispatchAgentDelete(ctx, existingAgent, false, false, false, time.Time{})
-		}
-		if err := s.store.DeleteAgent(ctx, existingAgent.ID); err != nil {
-			writeErrorFromErr(w, err, "")
-			return
-		}
-		existingAgent = nil // Fall through to create new agent with env-gather
-	}
-
-	if existingAgent != nil && !req.ProvisionOnly &&
-		(existingAgent.Status == store.AgentStatusCreated ||
-			existingAgent.Status == store.AgentStatusProvisioning ||
-			existingAgent.Status == store.AgentStatusPending) {
-		// Agent was provisioned but not started — start it now.
-		dispatcher := s.GetDispatcher()
-		if dispatcher == nil || existingAgent.RuntimeBrokerID == "" {
-			writeError(w, http.StatusBadRequest, ErrCodeValidationError,
-				"cannot start agent: no runtime broker available", nil)
-			return
-		}
-
-		// Update applied config with the task if provided
-		if req.Task != "" && existingAgent.AppliedConfig != nil {
-			existingAgent.AppliedConfig.Task = req.Task
-			existingAgent.AppliedConfig.Attach = req.Attach
-		}
-
-		// Dispatch start action — DispatchAgentStart applies the broker's
-		// response (status, container info) onto existingAgent in-place.
-		if err := dispatcher.DispatchAgentStart(ctx, existingAgent, req.Task); err != nil {
-			RuntimeError(w, "Failed to start agent: "+err.Error())
-			return
-		}
-
-		// If the broker didn't set a status, default to running
-		if existingAgent.Status == store.AgentStatusCreated ||
-			existingAgent.Status == store.AgentStatusProvisioning ||
-			existingAgent.Status == store.AgentStatusPending {
-			existingAgent.Status = store.AgentStatusRunning
-		}
-		if err := s.store.UpdateAgent(ctx, existingAgent); err != nil {
-			// Log but continue - agent was started
-			slog.Warn("Failed to update agent status after start", "error", err)
-		}
-
-		// Enrich and return the existing agent
-		s.enrichAgent(ctx, existingAgent, grove, nil)
-		writeJSON(w, http.StatusOK, CreateAgentResponse{
-			Agent: existingAgent,
-		})
-		return
+	switch s.handleExistingAgent(ctx, w, existingAgent, grove, runtimeBrokerID, req) {
+	case existingAgentStarted, existingAgentErrored:
+		return // Response already written.
+	case existingAgentDeleted:
+		// Fall through to create a new agent below.
+	case existingAgentNone:
+		// No existing agent (or unhandled status) — fall through to create.
 	}
 
 	// Resolve template if specified - the client may pass either a template ID or name
@@ -2054,61 +1987,21 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 		return
 	}
 
-	// Check if the agent already exists. If it does, start it instead of creating a new one.
-	{
-		slug := api.Slugify(req.Name)
-		existingAgent, err := s.store.GetAgentBySlug(ctx, groveID, slug)
-		if err != nil && err != store.ErrNotFound {
-			writeErrorFromErr(w, err, "")
-			return
-		}
+	// Check if the agent already exists. Handle stale cleanup, restart, etc.
+	slug := api.Slugify(req.Name)
+	existingAgent, err := s.store.GetAgentBySlug(ctx, groveID, slug)
+	if err != nil && err != store.ErrNotFound {
+		writeErrorFromErr(w, err, "")
+		return
+	}
 
-		// If the agent is stuck in "provisioning" (e.g. env-gather was cancelled)
-		// and the new request wants env-gather, delete the stale agent so a fresh
-		// env-gather flow runs from scratch.
-		if existingAgent != nil && req.GatherEnv &&
-			existingAgent.Status == store.AgentStatusProvisioning {
-			dispatcher := s.GetDispatcher()
-			if dispatcher != nil && existingAgent.RuntimeBrokerID != "" {
-				_ = dispatcher.DispatchAgentDelete(ctx, existingAgent, false, false, false, time.Time{})
-			}
-			if err := s.store.DeleteAgent(ctx, existingAgent.ID); err != nil {
-				writeErrorFromErr(w, err, "")
-				return
-			}
-			existingAgent = nil // Fall through to create new agent with env-gather
-		}
-
-		if existingAgent != nil {
-			dispatcher := s.GetDispatcher()
-			if dispatcher == nil || existingAgent.RuntimeBrokerID == "" {
-				writeError(w, http.StatusBadRequest, ErrCodeValidationError,
-					"cannot start agent: no runtime broker available", nil)
-				return
-			}
-
-			// Dispatch start action — DispatchAgentStart applies the broker's
-			// response (status, container info) onto existingAgent in-place.
-			if err := dispatcher.DispatchAgentStart(ctx, existingAgent, req.Task); err != nil {
-				RuntimeError(w, "Failed to start agent: "+err.Error())
-				return
-			}
-
-			// If the broker didn't set a running status, default to running
-			if existingAgent.Status != store.AgentStatusRunning {
-				existingAgent.Status = store.AgentStatusRunning
-			}
-			if err := s.store.UpdateAgent(ctx, existingAgent); err != nil {
-				slog.Warn("Failed to update agent status after start", "error", err)
-			}
-
-			s.enrichAgent(ctx, existingAgent, grove, nil)
-			writeJSON(w, http.StatusOK, CreateAgentResponse{
-				Agent: existingAgent,
-			})
-			return
-		}
-		// Agent doesn't exist - fall through to create it
+	switch s.handleExistingAgent(ctx, w, existingAgent, grove, runtimeBrokerID, req) {
+	case existingAgentStarted, existingAgentErrored:
+		return // Response already written.
+	case existingAgentDeleted:
+		// Fall through to create a new agent below.
+	case existingAgentNone:
+		// No existing agent (or unhandled status) — fall through to create.
 	}
 
 	// Resolve template if specified - the client may pass either a template ID or name
@@ -2146,7 +2039,7 @@ func (s *Server) createGroveAgent(w http.ResponseWriter, r *http.Request, groveI
 
 	agent := &store.Agent{
 		ID:              api.NewUUID(),
-		Slug:            api.Slugify(req.Name),
+		Slug:            slug,
 		Name:            req.Name,
 		Template:        req.Template,
 		GroveID:         groveID,
@@ -4500,6 +4393,122 @@ func (s *Server) populateAgentConfig(agent *store.Agent, grove *store.Grove, res
 			agent.AppliedConfig.HubAccessScopes = resolvedTemplate.Config.HubAccess.Scopes
 		}
 	}
+}
+
+// existingAgentResult describes the outcome of handleExistingAgent.
+type existingAgentResult int
+
+const (
+	// existingAgentNone means no existing agent was found (or it was nil).
+	existingAgentNone existingAgentResult = iota
+	// existingAgentDeleted means the stale agent was cleaned up; caller should fall through to create.
+	existingAgentDeleted
+	// existingAgentStarted means the existing agent was (re)started; response already written.
+	existingAgentStarted
+	// existingAgentErrored means an error occurred; response already written.
+	existingAgentErrored
+)
+
+// handleExistingAgent encapsulates the full decision tree for an agent that
+// already exists when a create/start request arrives.
+//
+// Phases:
+//  1. Stale cleanup (running/stopped/error + not provision-only): dispatch delete, remove from DB → deleted
+//  2. Env-gather re-provisioning (provisioning + GatherEnv): dispatch delete, remove from DB → deleted
+//  3. Restart (created/provisioning/pending + not provision-only): recover broker ID, update config, dispatch start → started
+//  4. Otherwise: none (caller decides what to do)
+func (s *Server) handleExistingAgent(
+	ctx context.Context,
+	w http.ResponseWriter,
+	existingAgent *store.Agent,
+	grove *store.Grove,
+	runtimeBrokerID string,
+	req CreateAgentRequest,
+) existingAgentResult {
+	if existingAgent == nil {
+		return existingAgentNone
+	}
+
+	// Phase 1: Stale cleanup — agent is running/stopped/error and caller wants a real start.
+	if !req.ProvisionOnly &&
+		(existingAgent.Status == store.AgentStatusRunning ||
+			existingAgent.Status == store.AgentStatusStopped ||
+			existingAgent.Status == store.AgentStatusError) {
+		dispatcher := s.GetDispatcher()
+		if dispatcher != nil && existingAgent.RuntimeBrokerID != "" {
+			_ = dispatcher.DispatchAgentDelete(ctx, existingAgent, false, false, false, time.Time{})
+		}
+		if err := s.store.DeleteAgent(ctx, existingAgent.ID); err != nil {
+			writeErrorFromErr(w, err, "")
+			return existingAgentErrored
+		}
+		return existingAgentDeleted
+	}
+
+	// Phase 2: Env-gather re-provisioning — provisioning + GatherEnv requested.
+	if req.GatherEnv && existingAgent.Status == store.AgentStatusProvisioning {
+		dispatcher := s.GetDispatcher()
+		if dispatcher != nil && existingAgent.RuntimeBrokerID != "" {
+			_ = dispatcher.DispatchAgentDelete(ctx, existingAgent, false, false, false, time.Time{})
+		}
+		if err := s.store.DeleteAgent(ctx, existingAgent.ID); err != nil {
+			writeErrorFromErr(w, err, "")
+			return existingAgentErrored
+		}
+		return existingAgentDeleted
+	}
+
+	// Phase 3: Restart — agent was provisioned/created/pending but not yet started.
+	if !req.ProvisionOnly &&
+		(existingAgent.Status == store.AgentStatusCreated ||
+			existingAgent.Status == store.AgentStatusProvisioning ||
+			existingAgent.Status == store.AgentStatusPending) {
+
+		// Recover RuntimeBrokerID from the freshly-resolved value if the stored one is empty.
+		if existingAgent.RuntimeBrokerID == "" && runtimeBrokerID != "" {
+			existingAgent.RuntimeBrokerID = runtimeBrokerID
+		}
+
+		dispatcher := s.GetDispatcher()
+		if dispatcher == nil || existingAgent.RuntimeBrokerID == "" {
+			writeError(w, http.StatusBadRequest, ErrCodeValidationError,
+				"cannot start agent: no runtime broker available", nil)
+			return existingAgentErrored
+		}
+
+		// Update applied config with the task/attach if provided.
+		if req.Task != "" && existingAgent.AppliedConfig != nil {
+			existingAgent.AppliedConfig.Task = req.Task
+			existingAgent.AppliedConfig.Attach = req.Attach
+		}
+
+		// Dispatch start action — DispatchAgentStart applies the broker's
+		// response (status, container info) onto existingAgent in-place.
+		if err := dispatcher.DispatchAgentStart(ctx, existingAgent, req.Task); err != nil {
+			RuntimeError(w, "Failed to start agent: "+err.Error())
+			return existingAgentErrored
+		}
+
+		// If the broker didn't set a running status, default to running.
+		if existingAgent.Status == store.AgentStatusCreated ||
+			existingAgent.Status == store.AgentStatusProvisioning ||
+			existingAgent.Status == store.AgentStatusPending {
+			existingAgent.Status = store.AgentStatusRunning
+		}
+		if err := s.store.UpdateAgent(ctx, existingAgent); err != nil {
+			// Log but continue — agent was started.
+			slog.Warn("Failed to update agent status after start", "error", err)
+		}
+
+		// Enrich and return the existing agent.
+		s.enrichAgent(ctx, existingAgent, grove, nil)
+		writeJSON(w, http.StatusOK, CreateAgentResponse{
+			Agent: existingAgent,
+		})
+		return existingAgentStarted
+	}
+
+	return existingAgentNone
 }
 
 // resolveRuntimeBroker determines which runtime broker should run the agent.

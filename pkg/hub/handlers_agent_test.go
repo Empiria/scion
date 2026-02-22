@@ -1731,3 +1731,276 @@ func TestCreateAgent_HarnessFieldIgnoredWhenTemplateResolved(t *testing.T) {
 	assert.Equal(t, "claude", agent.AppliedConfig.Harness,
 		"template-resolved harness should take precedence over request Harness field")
 }
+
+// ---------------------------------------------------------------------------
+// Grove-scoped existing-agent tests (mirror createAgent tests)
+// ---------------------------------------------------------------------------
+
+func TestCreateGroveAgent_RecreateFromRunningStatus(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	runningAgent := &store.Agent{
+		ID:              "grove-agent-running",
+		Slug:            "running-grove-agent",
+		Name:            "running-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "broker-create",
+		Status:          store.AgentStatusRunning,
+	}
+	require.NoError(t, s.CreateAgent(ctx, runningAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name: "running-grove-agent",
+			Task: "new task",
+		})
+
+	require.Equal(t, http.StatusCreated, rec.Code,
+		"re-creating a running grove agent should succeed with 201")
+
+	_, err := s.GetAgent(ctx, "grove-agent-running")
+	assert.ErrorIs(t, err, store.ErrNotFound, "old running agent should be deleted")
+
+	assert.True(t, disp.deleteCalled, "dispatcher should have been asked to delete old agent")
+
+	var resp CreateAgentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Agent)
+	assert.NotEqual(t, "grove-agent-running", resp.Agent.ID)
+	assert.Equal(t, store.AgentStatusRunning, resp.Agent.Status)
+}
+
+func TestCreateGroveAgent_RecreateFromStoppedStatus(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	stoppedAgent := &store.Agent{
+		ID:              "grove-agent-stopped",
+		Slug:            "stopped-grove-agent",
+		Name:            "stopped-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "broker-create",
+		Status:          store.AgentStatusStopped,
+	}
+	require.NoError(t, s.CreateAgent(ctx, stoppedAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name: "stopped-grove-agent",
+			Task: "restart after stop",
+		})
+
+	require.Equal(t, http.StatusCreated, rec.Code,
+		"re-creating a stopped grove agent should succeed with 201")
+
+	_, err := s.GetAgent(ctx, "grove-agent-stopped")
+	assert.ErrorIs(t, err, store.ErrNotFound, "old stopped agent should be deleted")
+}
+
+func TestCreateGroveAgent_RecreateFromErrorStatus(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	errorAgent := &store.Agent{
+		ID:              "grove-agent-errored",
+		Slug:            "errored-grove-agent",
+		Name:            "errored-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "broker-create",
+		Status:          store.AgentStatusError,
+	}
+	require.NoError(t, s.CreateAgent(ctx, errorAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name: "errored-grove-agent",
+			Task: "retry after error",
+		})
+
+	require.Equal(t, http.StatusCreated, rec.Code,
+		"re-creating an errored grove agent should succeed with 201")
+
+	_, err := s.GetAgent(ctx, "grove-agent-errored")
+	assert.ErrorIs(t, err, store.ErrNotFound, "old errored agent should be deleted")
+}
+
+func TestCreateGroveAgent_RestartFromProvisioningStatus(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	provAgent := &store.Agent{
+		ID:              "grove-agent-prov",
+		Slug:            "prov-grove-agent",
+		Name:            "prov-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "broker-create",
+		Status:          store.AgentStatusProvisioning,
+	}
+	require.NoError(t, s.CreateAgent(ctx, provAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name: "prov-grove-agent",
+			Task: "retry task",
+		})
+
+	assert.Equal(t, http.StatusOK, rec.Code,
+		"re-starting a provisioning grove agent should succeed (200)")
+
+	var resp CreateAgentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Agent)
+	assert.Equal(t, store.AgentStatusRunning, resp.Agent.Status)
+}
+
+func TestCreateGroveAgent_RestartFromPendingStatus(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	pendingAgent := &store.Agent{
+		ID:              "grove-agent-pending",
+		Slug:            "pending-grove-agent",
+		Name:            "pending-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "broker-create",
+		Status:          store.AgentStatusPending,
+	}
+	require.NoError(t, s.CreateAgent(ctx, pendingAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name: "pending-grove-agent",
+			Task: "retry task",
+		})
+
+	assert.Equal(t, http.StatusOK, rec.Code,
+		"re-starting a pending grove agent should succeed (200)")
+}
+
+// ---------------------------------------------------------------------------
+// Config update and broker-ID recovery tests
+// ---------------------------------------------------------------------------
+
+func TestCreateGroveAgent_ConfigUpdateOnRestart(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	existingAgent := &store.Agent{
+		ID:              "grove-agent-config",
+		Slug:            "config-grove-agent",
+		Name:            "config-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "broker-create",
+		Status:          store.AgentStatusCreated,
+		AppliedConfig: &store.AgentAppliedConfig{
+			Task:   "old task",
+			Attach: false,
+		},
+	}
+	require.NoError(t, s.CreateAgent(ctx, existingAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name:   "config-grove-agent",
+			Task:   "new task",
+			Attach: true,
+		})
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var resp CreateAgentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Agent)
+
+	persisted, err := s.GetAgent(ctx, resp.Agent.ID)
+	require.NoError(t, err)
+	require.NotNil(t, persisted.AppliedConfig)
+	assert.Equal(t, "new task", persisted.AppliedConfig.Task,
+		"task should be updated on restart")
+	assert.True(t, persisted.AppliedConfig.Attach,
+		"attach should be updated on restart")
+}
+
+func TestCreateGroveAgent_BrokerIDRecovery(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	// Pre-create agent with empty RuntimeBrokerID (simulates agent created
+	// before a broker was registered).
+	existingAgent := &store.Agent{
+		ID:              "grove-agent-no-broker",
+		Slug:            "no-broker-grove-agent",
+		Name:            "no-broker-grove-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "", // empty — should be recovered
+		Status:          store.AgentStatusCreated,
+	}
+	require.NoError(t, s.CreateAgent(ctx, existingAgent))
+
+	rec := doRequest(t, srv, http.MethodPost,
+		fmt.Sprintf("/api/v1/groves/%s/agents", grove.ID),
+		CreateAgentRequest{
+			Name: "no-broker-grove-agent",
+			Task: "start with recovered broker",
+		})
+
+	require.Equal(t, http.StatusOK, rec.Code,
+		"agent with empty broker ID should be started once broker is resolved")
+
+	var resp CreateAgentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Agent)
+
+	persisted, err := s.GetAgent(ctx, resp.Agent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "broker-create", persisted.RuntimeBrokerID,
+		"RuntimeBrokerID should be recovered from resolved broker")
+}
+
+func TestCreateAgent_BrokerIDRecovery(t *testing.T) {
+	disp := &createAgentDispatcher{createStatus: store.AgentStatusRunning}
+	srv, s, grove := setupCreateAgentServer(t, disp)
+	ctx := context.Background()
+
+	existingAgent := &store.Agent{
+		ID:              "agent-no-broker",
+		Slug:            "no-broker-agent",
+		Name:            "no-broker-agent",
+		GroveID:         grove.ID,
+		RuntimeBrokerID: "", // empty — should be recovered
+		Status:          store.AgentStatusCreated,
+	}
+	require.NoError(t, s.CreateAgent(ctx, existingAgent))
+
+	rec := doRequest(t, srv, http.MethodPost, "/api/v1/agents", CreateAgentRequest{
+		Name:    "no-broker-agent",
+		GroveID: grove.ID,
+		Task:    "start with recovered broker",
+	})
+
+	require.Equal(t, http.StatusOK, rec.Code,
+		"agent with empty broker ID should be started once broker is resolved")
+
+	var resp CreateAgentResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.Agent)
+
+	persisted, err := s.GetAgent(ctx, resp.Agent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "broker-create", persisted.RuntimeBrokerID,
+		"RuntimeBrokerID should be recovered from resolved broker")
+}
