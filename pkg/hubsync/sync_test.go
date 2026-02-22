@@ -1118,3 +1118,136 @@ func TestGetLocalAgentInfo_NonexistentAgent(t *testing.T) {
 		t.Errorf("Expected nil result for nonexistent agent, got %+v", result)
 	}
 }
+
+// TestCompareAgents_WatermarkBoundary verifies that agents whose creation time
+// equals the lastSyncedAt watermark are classified as RemoteOnly, not ToRemove.
+// This is the scenario when startAgentViaHub sets the watermark to
+// resp.Agent.Created — the agent's creation time matches the watermark exactly.
+func TestCompareAgents_WatermarkBoundary(t *testing.T) {
+	groveID := "test-grove-id"
+	brokerID := "test-broker-id"
+	watermarkTime := time.Date(2026, 2, 22, 19, 18, 4, 123456789, time.UTC)
+
+	tests := []struct {
+		name             string
+		agentCreated     time.Time
+		lastSyncedAt     time.Time
+		agentStatus      string
+		wantRemoteOnly   int
+		wantToRemove     int
+		wantPending      int
+	}{
+		{
+			name:           "agent created at exact watermark time is RemoteOnly",
+			agentCreated:   watermarkTime,
+			lastSyncedAt:   watermarkTime,
+			agentStatus:    "running",
+			wantRemoteOnly: 1,
+			wantToRemove:   0,
+		},
+		{
+			name:           "agent created after watermark is RemoteOnly",
+			agentCreated:   watermarkTime.Add(time.Second),
+			lastSyncedAt:   watermarkTime,
+			agentStatus:    "running",
+			wantRemoteOnly: 1,
+			wantToRemove:   0,
+		},
+		{
+			name:           "agent created before watermark is ToRemove",
+			agentCreated:   watermarkTime.Add(-time.Minute),
+			lastSyncedAt:   watermarkTime,
+			agentStatus:    "running",
+			wantRemoteOnly: 0,
+			wantToRemove:   1,
+		},
+		{
+			name:           "agent with pending status is Pending regardless of watermark",
+			agentCreated:   watermarkTime.Add(-time.Minute),
+			lastSyncedAt:   watermarkTime,
+			agentStatus:    "pending",
+			wantRemoteOnly: 0,
+			wantToRemove:   0,
+			wantPending:    1,
+		},
+		{
+			name:           "zero watermark treats all agents as RemoteOnly",
+			agentCreated:   watermarkTime,
+			lastSyncedAt:   time.Time{},
+			agentStatus:    "running",
+			wantRemoteOnly: 1,
+			wantToRemove:   0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set up temp grove directory (no local agents)
+			tmpDir := t.TempDir()
+			agentsDir := filepath.Join(tmpDir, "agents")
+			if err := os.MkdirAll(agentsDir, 0755); err != nil {
+				t.Fatalf("Failed to create agents dir: %v", err)
+			}
+
+			// Write state.yaml with the lastSyncedAt watermark
+			if !tt.lastSyncedAt.IsZero() {
+				state := &config.GroveState{
+					LastSyncedAt: tt.lastSyncedAt.Format(time.RFC3339Nano),
+				}
+				if err := config.SaveGroveState(tmpDir, state); err != nil {
+					t.Fatalf("Failed to save grove state: %v", err)
+				}
+			}
+
+			// Mock Hub server that returns one agent
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if strings.Contains(r.URL.Path, "/agents") {
+					w.Header().Set("Content-Type", "application/json")
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"agents": []map[string]interface{}{
+							{
+								"id":              "agent-uuid-1",
+								"name":            "hub-agent",
+								"status":          tt.agentStatus,
+								"runtimeBrokerId": brokerID,
+								"created":         tt.agentCreated.Format(time.RFC3339Nano),
+							},
+						},
+						"serverTime": time.Now().UTC().Format(time.RFC3339Nano),
+					})
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			defer server.Close()
+
+			client, err := hubclient.New(server.URL)
+			if err != nil {
+				t.Fatalf("Failed to create hub client: %v", err)
+			}
+
+			hubCtx := &HubContext{
+				Client:    client,
+				GroveID:   groveID,
+				BrokerID:  brokerID,
+				GrovePath: tmpDir,
+				Settings:  &config.Settings{},
+			}
+
+			result, err := CompareAgents(context.Background(), hubCtx)
+			if err != nil {
+				t.Fatalf("CompareAgents failed: %v", err)
+			}
+
+			if len(result.RemoteOnly) != tt.wantRemoteOnly {
+				t.Errorf("RemoteOnly: got %d, want %d", len(result.RemoteOnly), tt.wantRemoteOnly)
+			}
+			if len(result.ToRemove) != tt.wantToRemove {
+				t.Errorf("ToRemove: got %d, want %d", len(result.ToRemove), tt.wantToRemove)
+			}
+			if tt.wantPending > 0 && len(result.Pending) != tt.wantPending {
+				t.Errorf("Pending: got %d, want %d", len(result.Pending), tt.wantPending)
+			}
+		})
+	}
+}

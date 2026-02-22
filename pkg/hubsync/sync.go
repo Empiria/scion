@@ -529,10 +529,14 @@ func CompareAgents(ctx context.Context, hubCtx *HubContext) (*SyncResult, error)
 			if a.Status == "pending" {
 				result.Pending = append(result.Pending, AgentRef{Name: a.Name, ID: a.ID})
 				debugf("Agent %s (id=%s) is pending, not requiring sync", a.Name, a.ID)
-			} else if lastSyncedAt.IsZero() || a.Created.After(lastSyncedAt) {
-				// First sync or agent created after our last sync — another broker created it
+			} else if lastSyncedAt.IsZero() || !a.Created.Before(lastSyncedAt) {
+				// First sync or agent created at/after our last sync — another broker
+				// created it, or we just created it via Hub (watermark set to creation
+				// time). Uses !Before instead of After to include agents created at
+				// exactly the watermark time, which occurs when startAgentViaHub sets
+				// the watermark to resp.Agent.Created.
 				result.RemoteOnly = append(result.RemoteOnly, AgentRef{Name: a.Name, ID: a.ID})
-				debugf("Agent %s (id=%s) created after last sync or first sync, treating as remote-only", a.Name, a.ID)
+				debugf("Agent %s (id=%s) created at/after last sync or first sync, treating as remote-only", a.Name, a.ID)
 			} else {
 				result.ToRemove = append(result.ToRemove, AgentRef{Name: a.Name, ID: a.ID})
 				debugf("Agent %s (id=%s) existed at last sync but not local, marking for removal", a.Name, a.ID)
