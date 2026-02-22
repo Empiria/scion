@@ -120,6 +120,7 @@ func (b *LocalBackend) Resolve(ctx context.Context, userID, groveID, brokerID st
 					Scope:       sc.scope,
 					ScopeID:     sc.scopeID,
 					Description: s.Description,
+					SecretRef:   s.SecretRef,
 					Version:     s.Version,
 					Created:     s.Created,
 					Updated:     s.Updated,

@@ -182,3 +182,20 @@ func (c *Client) GetSandbox(ctx context.Context, namespace, name string) (*v1alp
 
 	return &sandbox, nil
 }
+
+// CreateSecretProviderClass creates a SecretProviderClass CRD resource in the given namespace.
+func (c *Client) CreateSecretProviderClass(ctx context.Context, namespace string, spc *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return c.dynamic.Resource(SecretProviderClassGVR).Namespace(namespace).Create(ctx, spc, metav1.CreateOptions{})
+}
+
+// DeleteSecretProviderClass deletes a SecretProviderClass CRD resource by name.
+func (c *Client) DeleteSecretProviderClass(ctx context.Context, namespace, name string) error {
+	return c.dynamic.Resource(SecretProviderClassGVR).Namespace(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+}
+
+// ListSecretProviderClasses lists SecretProviderClass CRD resources matching a label selector.
+func (c *Client) ListSecretProviderClasses(ctx context.Context, namespace, labelSelector string) (*unstructured.UnstructuredList, error) {
+	return c.dynamic.Resource(SecretProviderClassGVR).Namespace(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+}

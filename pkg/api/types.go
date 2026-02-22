@@ -386,12 +386,12 @@ type SecretKeyInfo struct {
 // ResolvedSecret represents a secret that has been resolved from the Hub
 // and is ready for projection into an agent container.
 type ResolvedSecret struct {
-	Name   string `json:"name"`           // Secret key name
-	Type   string `json:"type"`           // environment, variable, file
-	Target string `json:"target"`         // Projection target (env var name, json key, or file path)
-	Value  string `json:"value"`          // Decrypted secret value
-	Source string `json:"source"`         // Scope that provided this secret (user, grove, runtime_broker)
-	Ref    string `json:"ref,omitempty"`  // External reference (e.g., GCP SM resource path)
+	Name   string `json:"name"`             // Secret key name
+	Type   string `json:"type"`             // environment, variable, file
+	Target string `json:"target"`           // Projection target (env var name, json key, or file path)
+	Value  string `json:"value"`            // Decrypted secret value
+	Source string `json:"source"`           // Scope that provided this secret (user, grove, runtime_broker)
+	Ref    string `json:"ref,omitempty"`    // External secret reference (e.g., "gcpsm:projects/123/secrets/name")
 }
 
 // GitCloneConfig specifies how to clone a git repository into the workspace.

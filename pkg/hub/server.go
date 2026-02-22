@@ -247,12 +247,12 @@ type RemoteCreateAgentRequest struct {
 
 // ResolvedSecret represents a secret resolved by the Hub for projection into an agent container.
 type ResolvedSecret struct {
-	Name   string `json:"name"`          // Secret key name
-	Type   string `json:"type"`          // environment, variable, file
-	Target string `json:"target"`        // Projection target
-	Value  string `json:"value"`         // Decrypted secret value
-	Source string `json:"source"`        // Scope that provided this secret
-	Ref    string `json:"ref,omitempty"` // External reference (e.g., GCP SM resource path)
+	Name   string `json:"name"`             // Secret key name
+	Type   string `json:"type"`             // environment, variable, file
+	Target string `json:"target"`           // Projection target
+	Value  string `json:"value"`            // Decrypted secret value
+	Source string `json:"source"`           // Scope that provided this secret
+	Ref    string `json:"ref,omitempty"`    // External secret reference (e.g., "gcpsm:projects/123/secrets/name")
 }
 
 // RemoteAgentConfig contains agent configuration for remote creation.

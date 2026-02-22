@@ -29,7 +29,7 @@ import (
 func TestKubernetesRuntime_List(t *testing.T) {
 	// Create a fake clientset
 	clientset := k8sfake.NewSimpleClientset()
-	
+
 	// Create a pod that mimics what we expect
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -51,7 +51,7 @@ func TestKubernetesRuntime_List(t *testing.T) {
 			},
 		},
 	}
-	
+
 	_, err := clientset.CoreV1().Pods("default").Create(context.Background(), pod, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("failed to create pod: %v", err)
