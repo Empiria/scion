@@ -1,7 +1,7 @@
 # Walkthrough: Enabling Full OTEL Telemetry on Demo Hub GCE Instance
 
 **Created:** 2026-02-26
-**Status:** Ready for QA
+**Status:** Blocked (agent-side cloud telemetry auth)
 **Goal:** Enable and verify end-to-end OpenTelemetry on the `scion-demo` GCE
 instance, covering both Hub-side telemetry (Cloud Logging, Cloud Trace) and
 agent-side telemetry (settings-driven OTLP export).
@@ -19,6 +19,76 @@ local development telemetry QA, see [telemetry-gcp.md](telemetry-gcp.md).
 - `gcloud` CLI installed and authenticated with project access
 - SSH access to the `scion-demo` instance (`gcloud compute ssh scion-demo --zone us-central1-a`)
 - The instance was provisioned with `hack/gce-demo-provision.sh`
+
+---
+
+## Blocking Conditions
+
+The following issues must be resolved before agent-side cloud telemetry
+export can work end-to-end. Hub-side Cloud Logging (via `cloud_handler.go`)
+is unaffected — it uses the GCP client library which handles ADC natively.
+
+### B1: OTLP exporter lacks GCP credential injection
+
+**Affects:** Agent-side cloud export (sciontool), Hub-side OTel trace/log
+export (`otel_provider.go`)
+
+**Problem:** The cloud exporter in `pkg/sciontool/telemetry/exporter.go`
+creates a plain `otlptracegrpc` exporter:
+
+```go
+exporter, err := otlptracegrpc.New(context.Background(), opts...)
+```
+
+This establishes a TLS gRPC connection but does **not** inject OAuth2
+bearer tokens. Google Cloud's OTLP endpoint at
+`cloudtrace.googleapis.com:443` requires OAuth2 authentication on every
+RPC. The standard OTel OTLP gRPC SDK does not use GCP Application Default
+Credentials — that is a convention honored only by GCP-specific client
+libraries (e.g., `cloud.google.com/go`).
+
+The same gap exists in the Hub-side OTel log provider
+(`pkg/util/logging/otel_provider.go`), which also uses a plain
+`otlploggrpc` exporter.
+
+**Design reference:** [metrics-system.md §11.8](../hosted/metrics-system.md)
+marks credential injection as "out of scope" and defers to the runtime
+broker, but the broker does not currently address this.
+
+**Resolution options:**
+
+1. **Use `grpc.WithPerRPCCredentials`** — Fetch an OAuth2 token from ADC
+   (via `golang.org/x/oauth2/google.DefaultTokenSource`) and inject it as
+   a per-RPC credential on the gRPC dial options. This is the minimal fix.
+2. **Use Google's `opentelemetry-operations-go` exporter** — The
+   `github.com/GoogleCloudPlatform/opentelemetry-operations-go` package
+   wraps the OTLP exporter with native GCP auth handling.
+3. **Route through an OTel Collector sidecar** — Deploy an OTel Collector
+   on the instance that receives OTLP locally (no auth required) and
+   exports to Cloud Trace using its GCP exporter (which handles auth). This
+   avoids modifying sciontool code but adds operational complexity.
+
+**Who needs to act:** Sciontool telemetry implementation (exporter.go and
+otel_provider.go). The runtime broker should also ensure ADC is available
+inside agent containers — the harness already propagates
+`GOOGLE_APPLICATION_CREDENTIALS` and mounts the credential file, but this
+only helps if the exporter is updated to use it.
+
+### B2: Hub OTEL env vars should use hub.env
+
+**Affects:** Hub-side configuration management
+
+**Problem:** Hub-side OTEL environment variables (`SCION_CLOUD_LOGGING`,
+`SCION_OTEL_ENDPOINT`, etc.) are hardcoded as `Environment=` directives in
+the systemd unit template within `gce-start-hub.sh`. The `hub.env` file
+pattern is already implemented (the systemd unit uses
+`EnvironmentFile=/home/scion/.scion/hub.env`), so these should be managed
+there instead for easier configuration changes without re-deploying the
+service file.
+
+**Resolution:** Move the OTEL `Environment=` lines out of the systemd unit
+template in `gce-start-hub.sh` and into `hub.env.example` as uncommented
+defaults. Section 2.1 below documents the target state.
 
 ---
 
@@ -93,46 +163,66 @@ itself.
 
 ### 2.1 Environment variables
 
-The following environment variables must be set in the `scion-hub` systemd
-unit file. The `gce-start-hub.sh` script adds these automatically via
-`Environment=` directives:
+The following environment variables control Hub-side telemetry. They should
+be managed in the `hub.env` file (see `hack/hub.env.example` for the
+template). The systemd unit loads this file via
+`EnvironmentFile=/home/scion/.scion/hub.env`.
 
-```ini
-Environment="SCION_CLOUD_LOGGING=true"
-Environment="SCION_GCP_PROJECT_ID=deploy-demo-test"
-Environment="GOOGLE_CLOUD_PROJECT=deploy-demo-test"
-Environment="SCION_OTEL_ENDPOINT=cloudtrace.googleapis.com:443"
-Environment="SCION_OTEL_LOG_ENABLED=true"
+To set up, copy the example and fill in values:
+
+```bash
+cp hack/hub.env.example .scratch/hub.env
+# Edit .scratch/hub.env with your values
 ```
-<!--  feedback: prefer to manage these in a hub.env file. Document this and remove from the gce-start-hub.sh script. -->
+
+The `gce-start-hub.sh` script automatically uploads `.scratch/hub.env` to
+the instance at `/home/scion/.scion/hub.env`.
+
+**Required telemetry variables in hub.env:**
+
+```bash
+# Core Hub configuration (required)
+SCION_HUB_STORAGE_BUCKET=scion-demo-templates
+SESSION_SECRET=<generate-with-openssl-rand-base64-32>
+
+# Telemetry (OTEL)
+SCION_CLOUD_LOGGING=true
+SCION_GCP_PROJECT_ID=deploy-demo-test
+GOOGLE_CLOUD_PROJECT=deploy-demo-test
+SCION_OTEL_ENDPOINT=cloudtrace.googleapis.com:443
+SCION_OTEL_LOG_ENABLED=true
+```
 
 
 ### 2.2 Retrofit an existing instance
 
-If the instance was deployed before these changes were added to
-`gce-start-hub.sh`, update the systemd unit manually:
+If the instance was deployed before the hub.env pattern was adopted, update
+the configuration manually:
 
 ```bash
 gcloud compute ssh scion-demo --zone us-central1-a --command '
     sudo systemctl stop scion-hub
 
-    # Edit the unit file to add Environment= lines
-    sudo tee -a /etc/systemd/system/scion-hub.service.d/otel.conf > /dev/null <<EOF
-[Service]
-Environment="SCION_CLOUD_LOGGING=true"
-Environment="SCION_GCP_PROJECT_ID=deploy-demo-test"
-Environment="GOOGLE_CLOUD_PROJECT=deploy-demo-test"
-Environment="SCION_OTEL_ENDPOINT=cloudtrace.googleapis.com:443"
-Environment="SCION_OTEL_LOG_ENABLED=true"
+    # Create or update hub.env with telemetry variables
+    sudo tee /home/scion/.scion/hub.env > /dev/null <<EOF
+SCION_HUB_STORAGE_BUCKET=scion-demo-templates
+SESSION_SECRET=<your-session-secret>
+SCION_CLOUD_LOGGING=true
+SCION_GCP_PROJECT_ID=deploy-demo-test
+GOOGLE_CLOUD_PROJECT=deploy-demo-test
+SCION_OTEL_ENDPOINT=cloudtrace.googleapis.com:443
+SCION_OTEL_LOG_ENABLED=true
 EOF
 
+    sudo chown scion:scion /home/scion/.scion/hub.env
+    sudo chmod 600 /home/scion/.scion/hub.env
     sudo systemctl daemon-reload
     sudo systemctl start scion-hub
 '
 ```
 
-Alternatively, re-run `hack/gce-start-hub.sh` which will regenerate the
-full unit file with the OTEL lines included.
+Alternatively, re-run `hack/gce-start-hub.sh` which will upload your local
+`.scratch/hub.env` and regenerate the systemd unit.
 
 ### 2.3 Verify Hub telemetry initialized
 
@@ -192,7 +282,12 @@ telemetry:
 EOF
 '
 ```
-<!-- feedback, I'm confused on how we left the design to allow the sciontool to be authenticated to the cloud telemetry ingest endpoints, I feel like that might be an unsolved problem? -->
+
+> **Note:** Cloud export from agent containers requires GCP credential
+> injection into the OTLP exporter, which is not yet implemented. See
+> [Blocking Condition B1](#b1-otlp-exporter-lacks-gcp-credential-injection)
+> above. The settings-to-env bridge and local telemetry pipeline work
+> correctly; only the cloud export leg is blocked.
 
 ### 3.2 Verify env var injection
 
@@ -312,11 +407,11 @@ Expected: `scion-demo-sa@deploy-demo-test.iam.gserviceaccount.com`
 **Symptom:** Traces/logs appear in the wrong project or not at all.
 
 **Fix:** Verify both `SCION_GCP_PROJECT_ID` and `GOOGLE_CLOUD_PROJECT` are
-set correctly in the systemd unit:
+set correctly in hub.env:
 
 ```bash
 gcloud compute ssh scion-demo --zone us-central1-a --command \
-    'sudo systemctl cat scion-hub | grep -E "PROJECT"'
+    'grep -E "PROJECT" /home/scion/.scion/hub.env'
 ```
 
 ### Cloud Logging API not enabled
@@ -356,7 +451,7 @@ gcloud compute ssh scion-demo --zone us-central1-a --command '
 
 ## 6. Quick Reference
 
-### Hub-side environment variables
+### Hub-side environment variables (via hub.env)
 
 | Variable | Value | Purpose |
 |----------|-------|---------|

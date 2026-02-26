@@ -114,11 +114,6 @@ Group=scion
 WorkingDirectory=%s
 EnvironmentFile=/home/scion/.scion/hub.env
 Environment=\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"
-Environment=\"SCION_CLOUD_LOGGING=true\"
-Environment=\"SCION_GCP_PROJECT_ID=${PROJECT_ID}\"
-Environment=\"GOOGLE_CLOUD_PROJECT=${PROJECT_ID}\"
-Environment=\"SCION_OTEL_ENDPOINT=cloudtrace.googleapis.com:443\"
-Environment=\"SCION_OTEL_LOG_ENABLED=true\"
 # Use journald for log management
 StandardOutput=journal
 StandardError=journal
