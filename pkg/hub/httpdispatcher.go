@@ -493,18 +493,29 @@ func (d *HTTPAgentDispatcher) getBrokerEndpoint(ctx context.Context, brokerID st
 // buildCreateRequest builds a RemoteCreateAgentRequest from the agent's store record.
 // This is shared between DispatchAgentCreate and DispatchAgentProvision.
 func (d *HTTPAgentDispatcher) buildCreateRequest(ctx context.Context, agent *store.Agent, callerName string) (*RemoteCreateAgentRequest, error) {
-	// Look up the local path for this grove on the target runtime broker
+	// Look up the local path for this grove on the target runtime broker.
+	// For hub-native groves (no git remote), we skip LocalPath and use
+	// groveSlug instead so each broker resolves the path on its own filesystem.
+	// The hub's local path is not valid for remote brokers.
 	var grovePath string
-	if agent.GroveID != "" && agent.RuntimeBrokerID != "" {
-		provider, err := d.store.GetGroveProvider(ctx, agent.GroveID, agent.RuntimeBrokerID)
-		if err != nil {
-			if d.debug {
-				slog.Warn("Failed to get grove provider for path lookup", "error", err)
-			}
-		} else if provider.LocalPath != "" {
-			grovePath = provider.LocalPath
-			if d.debug {
-				slog.Debug("Found grove path for broker", "brokerID", agent.RuntimeBrokerID, "path", grovePath)
+	var groveSlug string
+	if agent.GroveID != "" {
+		grove, err := d.store.GetGrove(ctx, agent.GroveID)
+		if err == nil && grove.GitRemote == "" {
+			// Hub-native grove: let the broker resolve the path via slug
+			groveSlug = grove.Slug
+		} else if agent.RuntimeBrokerID != "" {
+			// Git-backed grove: use the broker's registered local path
+			provider, provErr := d.store.GetGroveProvider(ctx, agent.GroveID, agent.RuntimeBrokerID)
+			if provErr != nil {
+				if d.debug {
+					slog.Warn("Failed to get grove provider for path lookup", "error", provErr)
+				}
+			} else if provider.LocalPath != "" {
+				grovePath = provider.LocalPath
+				if d.debug {
+					slog.Debug("Found grove path for broker", "brokerID", agent.RuntimeBrokerID, "path", grovePath)
+				}
 			}
 		}
 	}
@@ -518,6 +529,7 @@ func (d *HTTPAgentDispatcher) buildCreateRequest(ctx context.Context, agent *sto
 		UserID:      agent.OwnerID,
 		HubEndpoint: d.hubEndpoint,
 		GrovePath:   grovePath,
+		GroveSlug:   groveSlug,
 	}
 
 	// Propagate attach mode from applied config
@@ -533,18 +545,6 @@ func (d *HTTPAgentDispatcher) buildCreateRequest(ctx context.Context, agent *sto
 	// Pass workspace storage path for GCS bootstrap (non-git workspaces)
 	if agent.AppliedConfig != nil && agent.AppliedConfig.WorkspaceStoragePath != "" {
 		req.WorkspaceStoragePath = agent.AppliedConfig.WorkspaceStoragePath
-	}
-
-	// For hub-native groves (no git remote AND no local provider path on this
-	// broker), propagate the grove slug so the broker can create the workspace
-	// at the conventional path (~/.scion/groves/<slug>/).
-	// When the broker has a local provider path, the grove exists on its
-	// filesystem already and should use that path instead.
-	if agent.GroveID != "" && grovePath == "" {
-		grove, err := d.store.GetGrove(ctx, agent.GroveID)
-		if err == nil && grove.GitRemote == "" {
-			req.GroveSlug = grove.Slug
-		}
 	}
 
 	if d.debug {
@@ -936,30 +936,30 @@ func (d *HTTPAgentDispatcher) DispatchAgentStart(ctx context.Context, agent *sto
 		task = agent.AppliedConfig.Task
 	}
 
-	// Look up the local path for this grove on the target runtime broker
+	// Look up the local path for this grove on the target runtime broker.
+	// For hub-native groves (no git remote), we skip LocalPath and use
+	// groveSlug instead so each broker resolves the path on its own filesystem.
+	// The hub's local path is not valid for remote brokers.
 	var grovePath string
-	if agent.GroveID != "" && agent.RuntimeBrokerID != "" {
-		provider, err := d.store.GetGroveProvider(ctx, agent.GroveID, agent.RuntimeBrokerID)
-		if err != nil {
-			if d.debug {
-				slog.Warn("Failed to get grove provider for path lookup", "error", err)
-			}
-		} else if provider.LocalPath != "" {
-			grovePath = provider.LocalPath
-			if d.debug {
-				slog.Debug("Found grove path for broker", "brokerID", agent.RuntimeBrokerID, "path", grovePath)
-			}
-		}
-	}
-
-	// For hub-native groves (no git remote AND no local provider path on this
-	// broker), propagate the grove slug so the broker can resolve the workspace
-	// at the conventional path (~/.scion/groves/<slug>/).
 	var groveSlug string
-	if agent.GroveID != "" && grovePath == "" {
+	if agent.GroveID != "" {
 		grove, err := d.store.GetGrove(ctx, agent.GroveID)
 		if err == nil && grove.GitRemote == "" {
+			// Hub-native grove: let the broker resolve the path via slug
 			groveSlug = grove.Slug
+		} else if agent.RuntimeBrokerID != "" {
+			// Git-backed grove: use the broker's registered local path
+			provider, provErr := d.store.GetGroveProvider(ctx, agent.GroveID, agent.RuntimeBrokerID)
+			if provErr != nil {
+				if d.debug {
+					slog.Warn("Failed to get grove provider for path lookup", "error", provErr)
+				}
+			} else if provider.LocalPath != "" {
+				grovePath = provider.LocalPath
+				if d.debug {
+					slog.Debug("Found grove path for broker", "brokerID", agent.RuntimeBrokerID, "path", grovePath)
+				}
+			}
 		}
 	}
 
