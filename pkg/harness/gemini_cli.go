@@ -95,8 +95,6 @@ func (g *GeminiCLI) DiscoverAuth(agentHome string) api.AuthConfig {
 func (g *GeminiCLI) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
 	env := make(map[string]string)
 
-	env["GEMINI_AGENT_NAME"] = agentName
-	
 	if relPath := g.getSystemPromptRelPath(agentHome); relPath != "" {
 		fullPath := fmt.Sprintf("%s/%s", util.GetHomeDir(unixUsername), relPath)
 		env["GEMINI_SYSTEM_MD"] = fullPath
