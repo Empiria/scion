@@ -93,10 +93,9 @@ func (r *DockerRuntime) Run(ctx context.Context, config RunConfig) (string, erro
 
 	newArgs = append(newArgs, args[1:]...)
 
-	// Add bind-mount flags for file secrets (spec format: "hostPath:containerPath:ro")
-	for _, spec := range secretMountSpecs {
-		newArgs = append(newArgs, "-v", spec)
-	}
+	// Insert secret volume mounts before the image so they are treated as
+	// docker flags rather than arguments to the container command.
+	newArgs = insertVolumeFlags(newArgs, config.Image, secretMountSpecs)
 
 	out, err := runSimpleCommand(ctx, r.Command, newArgs...)
 	if err != nil {

@@ -100,11 +100,12 @@ func (r *AppleContainerRuntime) Run(ctx context.Context, config RunConfig) (stri
 	// Skip the original 'run', '-d', and '-i' from buildCommonRunArgs (indices 0, 1, 2)
 	newArgs = append(newArgs, args[3:]...)
 
-	// Mount secrets staging directory as a read-only volume for Apple runtime
+	// Insert secrets staging directory volume before the image so it is treated
+	// as a container flag rather than an argument to the container command.
 	if config.HomeDir != "" && len(config.ResolvedSecrets) > 0 {
 		secretsDir := filepath.Join(filepath.Dir(config.HomeDir), "secrets")
 		if _, err := os.Stat(secretsDir); err == nil {
-			newArgs = append(newArgs, "-v", secretsDir+":/run/scion-secrets:ro")
+			newArgs = insertVolumeFlags(newArgs, config.Image, []string{secretsDir + ":/run/scion-secrets:ro"})
 		}
 	}
 
