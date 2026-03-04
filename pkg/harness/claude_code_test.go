@@ -304,7 +304,7 @@ func TestClaudeGetCommand_WithSystemPrompt(t *testing.T) {
 	c.InjectSystemPrompt(agentHome, []byte("You are a coding assistant."))
 
 	// Load system prompt via GetEnv (simulates runtime flow)
-	c.GetEnv("test-agent", agentHome, "scion", api.AuthConfig{})
+	c.GetEnv("test-agent", agentHome, "scion")
 
 	// GetCommand should now include --system-prompt
 	cmd := c.GetCommand("do something", false, nil)
@@ -326,7 +326,7 @@ func TestClaudeGetCommand_WithoutSystemPrompt(t *testing.T) {
 	c.InjectSystemPrompt(agentHome, []byte("# Placeholder"))
 
 	// Load via GetEnv — should not pick up placeholder
-	c.GetEnv("test-agent", agentHome, "scion", api.AuthConfig{})
+	c.GetEnv("test-agent", agentHome, "scion")
 
 	cmd := c.GetCommand("do something", false, nil)
 	expected := []string{"claude", "--no-chrome", "--dangerously-skip-permissions", "do something"}
@@ -340,7 +340,7 @@ func TestClaudeGetCommand_SystemPromptWithBaseArgs(t *testing.T) {
 	c := &ClaudeCode{}
 
 	c.InjectSystemPrompt(agentHome, []byte("Be helpful."))
-	c.GetEnv("test-agent", agentHome, "scion", api.AuthConfig{})
+	c.GetEnv("test-agent", agentHome, "scion")
 
 	cmd := c.GetCommand("task", false, []string{"--model", "opus"})
 	expected := []string{
@@ -460,7 +460,7 @@ func TestClaudeGetCommand_SystemPromptWithResume(t *testing.T) {
 	c := &ClaudeCode{}
 
 	c.InjectSystemPrompt(agentHome, []byte("Be concise."))
-	c.GetEnv("test-agent", agentHome, "scion", api.AuthConfig{})
+	c.GetEnv("test-agent", agentHome, "scion")
 
 	cmd := c.GetCommand("task", true, nil)
 	expected := []string{

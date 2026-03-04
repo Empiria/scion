@@ -30,43 +30,14 @@ func TestGeneric_Name(t *testing.T) {
 	}
 }
 
-func TestGeneric_DiscoverAuth(t *testing.T) {
-	os.Setenv("GEMINI_API_KEY", "test-gemini-key")
-	os.Setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
-	defer os.Unsetenv("GEMINI_API_KEY")
-	defer os.Unsetenv("ANTHROPIC_API_KEY")
-
-	g := &Generic{}
-	auth := g.DiscoverAuth("/tmp")
-
-	// Implicit env discovery is removed, so these should be empty
-	if auth.GeminiAPIKey != "" {
-		t.Errorf("Expected GeminiAPIKey '', got '%s'", auth.GeminiAPIKey)
-	}
-	if auth.AnthropicAPIKey != "" {
-		t.Errorf("Expected AnthropicAPIKey '', got '%s'", auth.AnthropicAPIKey)
-	}
-}
-
 func TestGeneric_GetEnv(t *testing.T) {
 	g := &Generic{}
-	auth := api.AuthConfig{
-		GeminiAPIKey:         "test-gemini-key",
-		AnthropicAPIKey:      "test-anthropic-key",
-		GoogleAppCredentials: "/path/to/creds.json",
-	}
 
-	env := g.GetEnv("test-agent", "", "test-user", auth)
+	env := g.GetEnv("test-agent", "", "test-user")
 
 	// GetEnv should only return non-auth env vars
 	if env["SCION_AGENT_NAME"] != "test-agent" {
 		t.Errorf("Expected SCION_AGENT_NAME = 'test-agent', got '%s'", env["SCION_AGENT_NAME"])
-	}
-	// Auth env vars should NOT be present (handled by ResolvedAuth)
-	for _, key := range []string{"GEMINI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"} {
-		if _, ok := env[key]; ok {
-			t.Errorf("Expected env[%s] to be absent (auth handled by ResolvedAuth), but it was present", key)
-		}
 	}
 }
 

@@ -443,7 +443,6 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		HomeDir:          agentHome,
 		Workspace:        effectiveWorkspace,
 		RepoRoot:         repoRoot,
-		Auth:             auth,
 		ResolvedAuth:     resolvedAuth,
 		Harness:          h,
 		TelemetryEnabled: telemetryEnabled,

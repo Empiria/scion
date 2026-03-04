@@ -1,6 +1,6 @@
 # Agent Auth Refactor
 
-## Status: In Progress (Phase 1-4 Complete)
+## Status: Complete (Phase 1-5)
 
 ## Problem Statement
 
@@ -326,11 +326,11 @@ For file-type secrets, the Hub stores base64-encoded content and the runtime pro
 - Claude's `ResolveAuth()` dynamically produces these env vars when Vertex credentials are available
 - Ensure Claude's `ResolveAuth()` produces clear error messages when no valid auth method is found
 
-### Step 5: Clean Up Legacy Methods
-- Remove `DiscoverAuth` from interface (after all callers migrated)
-- Simplify `GetEnv` to only return non-auth env vars
-- Simplify `PropagateFiles` to only handle non-auth file ops
-- Remove `GetVolumes` if fully subsumed
+### Step 5: Clean Up Legacy Methods ✅
+- Removed `DiscoverAuth`, `GetVolumes`, `PropagateFiles` from Harness interface and all implementations
+- Simplified `GetEnv` signature to drop unused `auth AuthConfig` parameter
+- Removed `Auth` field from `RunConfig` and M1 backward-compat auth fallback in k8s_runtime
+- Simplified `Provision()` in codex/opencode (were calling removed methods)
 
 ### Step 6: Validation and Error Reporting
 - Add `ValidateAuth()` that checks `ResolvedAuth` completeness before container launch

@@ -23,64 +23,11 @@ import (
 	"github.com/ptone/scion-agent/pkg/api"
 )
 
-func TestCodexAuthPropagation(t *testing.T) {
-	// Setup a temporary home directory
-	tmpHome, err := os.MkdirTemp("", "scion-home-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(tmpHome)
-
-	// Mock HOME environment variable
-	origHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpHome)
-	defer os.Setenv("HOME", origHome)
-
-	// Create ~/.codex/auth.json
-	codexDir := filepath.Join(tmpHome, ".codex")
-	if err := os.MkdirAll(codexDir, 0755); err != nil {
-		t.Fatal(err)
-	}
-	authPath := filepath.Join(codexDir, "auth.json")
-	if err := os.WriteFile(authPath, []byte(`{"token":"secret"}`), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	c := &Codex{}
-	agentHome := filepath.Join(tmpHome, "agent-home")
-
-	// Discover Auth
-	auth := c.DiscoverAuth(agentHome)
-	if auth.CodexAuthFile != authPath {
-		t.Errorf("expected CodexAuthFile to be %s, got %s", authPath, auth.CodexAuthFile)
-	}
-
-	// PropagateFiles is now a no-op (auth files handled by ResolvedAuth)
-	if err := c.PropagateFiles(agentHome, "user", auth); err != nil {
-		t.Fatalf("PropagateFiles failed: %v", err)
-	}
-
-	// Verify ResolveAuth correctly maps the file
-	result, err := c.ResolveAuth(auth)
-	if err != nil {
-		t.Fatalf("ResolveAuth failed: %v", err)
-	}
-	if result.Method != "codex-auth-file" {
-		t.Errorf("Method = %q, want %q", result.Method, "codex-auth-file")
-	}
-	if len(result.Files) != 1 {
-		t.Fatalf("expected 1 file mapping, got %d", len(result.Files))
-	}
-	if result.Files[0].SourcePath != authPath {
-		t.Errorf("SourcePath = %q, want %q", result.Files[0].SourcePath, authPath)
-	}
-}
-
 func TestCodexGetEnv(t *testing.T) {
 	c := &Codex{}
 
 	// GetEnv should return empty map (auth handled by ResolvedAuth)
-	env := c.GetEnv("test-agent", "/tmp", "user", api.AuthConfig{OpenAIAPIKey: "test-key", CodexAPIKey: "codex-key"})
+	env := c.GetEnv("test-agent", "/tmp", "user")
 	if len(env) != 0 {
 		t.Errorf("expected empty env (auth handled by ResolvedAuth), got %v", env)
 	}

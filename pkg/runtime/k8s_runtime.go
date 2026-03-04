@@ -617,17 +617,6 @@ func (r *KubernetesRuntime) buildPod(namespace string, config RunConfig) *corev1
 				ReadOnly:  true,
 			})
 		}
-	} else if config.Auth.GeminiAPIKey != "" || config.Auth.AnthropicAPIKey != "" || config.Auth.GoogleAPIKey != "" {
-		// Backward-compatible M1 auth fallback (only when no ResolvedSecrets or ResolvedAuth)
-		if config.Auth.GeminiAPIKey != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: "GEMINI_API_KEY", Value: config.Auth.GeminiAPIKey})
-		}
-		if config.Auth.AnthropicAPIKey != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: "ANTHROPIC_API_KEY", Value: config.Auth.AnthropicAPIKey})
-		}
-		if config.Auth.GoogleAPIKey != "" {
-			envVars = append(envVars, corev1.EnvVar{Name: "GOOGLE_API_KEY", Value: config.Auth.GoogleAPIKey})
-		}
 	}
 
 	// Inject GCP telemetry credential path if the well-known secret is present

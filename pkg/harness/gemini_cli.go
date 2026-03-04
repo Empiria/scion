@@ -24,7 +24,6 @@ import (
 	"strings"
 
 	"github.com/ptone/scion-agent/pkg/api"
-	"github.com/ptone/scion-agent/pkg/config"
 	geminiEmbeds "github.com/ptone/scion-agent/pkg/harness/gemini"
 	"github.com/ptone/scion-agent/pkg/util"
 )
@@ -35,64 +34,7 @@ func (g *GeminiCLI) Name() string {
 	return "gemini"
 }
 
-func (g *GeminiCLI) DiscoverAuth(agentHome string) api.AuthConfig {
-	auth := api.AuthConfig{
-		GoogleAppCredentials: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-		GoogleCloudProject:   util.FirstNonEmpty(os.Getenv("GOOGLE_CLOUD_PROJECT"), os.Getenv("GCP_PROJECT")),
-	}
-
-	home, _ := os.UserHomeDir()
-
-	// 1. Check scion-agent.json for overrides
-	selectedType := ""
-	scionAgentPath := filepath.Join(filepath.Dir(agentHome), "scion-agent.json")
-	if data, err := os.ReadFile(scionAgentPath); err == nil {
-		var cfg api.ScionConfig
-		if err := json.Unmarshal(data, &cfg); err == nil {
-			if cfg.Gemini != nil {
-				selectedType = cfg.Gemini.AuthSelectedType
-			}
-		}
-	}
-
-	// 2. Check agent settings
-	agentSettingsPath := filepath.Join(agentHome, g.DefaultConfigDir(), "settings.json")
-	if agentSettings, err := config.LoadAgentSettings(agentSettingsPath); err == nil {
-		if selectedType == "" {
-			selectedType = agentSettings.Security.Auth.SelectedType
-		}
-		if auth.GeminiAPIKey == "" && auth.GoogleAPIKey == "" {
-			auth.GeminiAPIKey = agentSettings.ApiKey
-		}
-	}
-
-	// 3. Load host settings for fallbacks
-	hostSettings, _ := config.GetAgentSettings()
-	if hostSettings != nil {
-		if selectedType == "" {
-			selectedType = hostSettings.Security.Auth.SelectedType
-		}
-		if auth.GeminiAPIKey == "" && auth.GoogleAPIKey == "" {
-			auth.GeminiAPIKey = hostSettings.ApiKey
-		}
-	}
-
-	auth.SelectedType = selectedType
-
-	switch selectedType {
-	case "oauth-personal":
-		oauthPath := filepath.Join(home, g.DefaultConfigDir(), "oauth_creds.json")
-		if _, err := os.Stat(oauthPath); err == nil {
-			auth.OAuthCreds = oauthPath
-		}
-	case "vertex-ai":
-		// Vertex might need project/location from env (already loaded) or settings
-	}
-
-	return auth
-}
-
-func (g *GeminiCLI) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
+func (g *GeminiCLI) GetEnv(agentName string, agentHome string, unixUsername string) map[string]string {
 	env := make(map[string]string)
 
 	if relPath := g.getSystemPromptRelPath(agentHome); relPath != "" {
@@ -113,26 +55,6 @@ func (g *GeminiCLI) GetCommand(task string, resume bool, baseArgs []string) []st
 		args = append(args, "--prompt-interactive", task)
 	}
 	return args
-}
-
-func (g *GeminiCLI) PropagateFiles(homeDir, unixUsername string, auth api.AuthConfig) error {
-	if homeDir == "" {
-		return nil
-	}
-
-	// Update settings.json with the selected auth type (non-auth settings overlay)
-	if auth.SelectedType != "" {
-		geminiSettingsPath := filepath.Join(homeDir, g.DefaultConfigDir(), "settings.json")
-		if err := g.updateSelectedAuthType(geminiSettingsPath, auth.SelectedType); err != nil {
-			return fmt.Errorf("failed to update gemini settings: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (g *GeminiCLI) GetVolumes(unixUsername string, auth api.AuthConfig) []api.VolumeMount {
-	return nil
 }
 
 func (g *GeminiCLI) DefaultConfigDir() string {

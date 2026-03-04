@@ -33,7 +33,6 @@ type RunConfig struct {
 	Volumes         []api.VolumeMount
 	Labels          map[string]string
 	Annotations     map[string]string
-	Auth            api.AuthConfig
 	ResolvedAuth    *api.ResolvedAuth
 	Harness         api.Harness
 	Task            string

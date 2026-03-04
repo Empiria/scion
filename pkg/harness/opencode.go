@@ -31,20 +31,7 @@ func (o *OpenCode) Name() string {
 	return "opencode"
 }
 
-func (o *OpenCode) DiscoverAuth(agentHome string) api.AuthConfig {
-	auth := api.AuthConfig{
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-	}
-	// Check for OpenCode auth file in standard location
-	home, _ := os.UserHomeDir()
-	authPath := filepath.Join(home, ".local", "share", "opencode", "auth.json")
-	if _, err := os.Stat(authPath); err == nil {
-		auth.OpenCodeAuthFile = authPath
-	}
-	return auth
-}
-
-func (o *OpenCode) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
+func (o *OpenCode) GetEnv(agentName string, agentHome string, unixUsername string) map[string]string {
 	return map[string]string{}
 }
 
@@ -62,14 +49,6 @@ func (o *OpenCode) GetCommand(task string, resume bool, baseArgs []string) []str
 	args = append(args, baseArgs...)
 	return args
 }
-func (o *OpenCode) PropagateFiles(homeDir, unixUsername string, auth api.AuthConfig) error {
-	return nil
-}
-
-func (o *OpenCode) GetVolumes(unixUsername string, auth api.AuthConfig) []api.VolumeMount {
-	return nil
-}
-
 func (o *OpenCode) DefaultConfigDir() string {
 	return ".config/opencode"
 }
@@ -79,8 +58,7 @@ func (o *OpenCode) HasSystemPrompt(agentHome string) bool {
 }
 
 func (o *OpenCode) Provision(ctx context.Context, agentName, agentHome, agentWorkspace string) error {
-	auth := o.DiscoverAuth(agentHome)
-	return o.PropagateFiles(agentHome, "", auth)
+	return nil
 }
 
 func (o *OpenCode) GetEmbedDir() string {

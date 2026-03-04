@@ -37,12 +37,9 @@ func (m *MockHarness) Name() string { return "mock" }
 func (m *MockHarness) GetCommand(task string, resume bool, args []string) []string {
 	return []string{"/bin/echo", "hello"}
 }
-func (m *MockHarness) GetVolumes(username string, auth api.AuthConfig) []api.VolumeMount { return nil }
-func (m *MockHarness) GetEnv(agentName, homeDir, username string, auth api.AuthConfig) map[string]string {
+func (m *MockHarness) GetEnv(agentName, homeDir, username string) map[string]string {
 	return nil
 }
-func (m *MockHarness) PropagateFiles(homeDir, username string, auth api.AuthConfig) error { return nil }
-func (m *MockHarness) DiscoverAuth(agentHome string) api.AuthConfig { return api.AuthConfig{} }
 func (m *MockHarness) DefaultConfigDir() string { return ".mock" }
 func (m *MockHarness) HasSystemPrompt(agentHome string) bool { return false }
 func (m *MockHarness) Provision(ctx context.Context, agentName, agentHome, agentWorkspace string) error { return nil }

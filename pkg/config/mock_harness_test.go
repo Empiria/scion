@@ -30,17 +30,10 @@ type MockHarness struct {
 }
 
 func (m *MockHarness) Name() string { return m.NameVal }
-func (m *MockHarness) DiscoverAuth(agentHome string) api.AuthConfig { return api.AuthConfig{} }
-func (m *MockHarness) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
+func (m *MockHarness) GetEnv(agentName string, agentHome string, unixUsername string) map[string]string {
 	return nil
 }
 func (m *MockHarness) GetCommand(task string, resume bool, baseArgs []string) []string { return nil }
-func (m *MockHarness) PropagateFiles(homeDir, unixUsername string, auth api.AuthConfig) error {
-	return nil
-}
-func (m *MockHarness) GetVolumes(unixUsername string, auth api.AuthConfig) []api.VolumeMount {
-	return nil
-}
 func (m *MockHarness) DefaultConfigDir() string { return m.ConfigDirVal }
 func (m *MockHarness) HasSystemPrompt(agentHome string) bool { return false }
 func (m *MockHarness) Provision(ctx context.Context, agentName, agentHome, agentWorkspace string) error {

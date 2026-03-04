@@ -216,14 +216,8 @@ func buildCommonRunArgs(config RunConfig) ([]string, error) {
 			}
 		}
 		// Call GetEnv for non-auth env vars (system prompt, agent name, etc.)
-		for k, v := range config.Harness.GetEnv(config.Name, config.HomeDir, config.UnixUsername, config.Auth) {
+		for k, v := range config.Harness.GetEnv(config.Name, config.HomeDir, config.UnixUsername) {
 			addEnv(k, v)
-		}
-		// Call PropagateFiles for non-auth file ops (settings.json overlay)
-		if config.HomeDir != "" {
-			if err := config.Harness.PropagateFiles(config.HomeDir, config.UnixUsername, config.Auth); err != nil {
-				return nil, err
-			}
 		}
 		if config.TelemetryEnabled {
 			for k, v := range config.Harness.GetTelemetryEnv() {

@@ -22,7 +22,6 @@ import (
 	"path/filepath"
 
 	"github.com/ptone/scion-agent/pkg/api"
-	"github.com/ptone/scion-agent/pkg/config"
 )
 
 type Generic struct{}
@@ -31,44 +30,7 @@ func (g *Generic) Name() string {
 	return "generic"
 }
 
-func (g *Generic) DiscoverAuth(agentHome string) api.AuthConfig {
-	auth := api.AuthConfig{
-		GoogleAppCredentials: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
-		GoogleCloudProject:   os.Getenv("GOOGLE_CLOUD_PROJECT"),
-	}
-
-	if auth.GoogleCloudProject == "" {
-		auth.GoogleCloudProject = os.Getenv("GCP_PROJECT")
-	}
-
-	// Check agent settings (from template)
-	agentSettingsPath := filepath.Join(agentHome, g.DefaultConfigDir(), "settings.json")
-	if agentSettings, err := config.LoadAgentSettings(agentSettingsPath); err == nil {
-		if auth.GeminiAPIKey == "" && auth.GoogleAPIKey == "" && agentSettings.ApiKey != "" {
-			// Determine where to put the API key.
-			// Since we don't know the harness, we might not be able to assign it correctly
-			// if it's not one of the known ones.
-			// However, AgentSettings struct is somewhat tailored to Gemini currently.
-			// We'll leave it as is for now or maybe try to guess?
-			// For generic, if ApiKey is there, maybe we put it in GeminiAPIKey as a fallback,
-			// or maybe we need a GenericAPIKey field in AuthConfig?
-			// Given AuthConfig limitations, we'll skip assigning it to a specific field
-			// if we are not sure, or default to one if it seems appropriate.
-			// But for "generic", maybe we just ignore settings.json specific keys unless we know what they are.
-		}
-	}
-
-	// Check for OAuth creds in default location
-	home, _ := os.UserHomeDir()
-	oauthPath := filepath.Join(home, g.DefaultConfigDir(), "oauth_creds.json")
-	if _, err := os.Stat(oauthPath); err == nil {
-		auth.OAuthCreds = oauthPath
-	}
-
-	return auth
-}
-
-func (g *Generic) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
+func (g *Generic) GetEnv(agentName string, agentHome string, unixUsername string) map[string]string {
 	env := make(map[string]string)
 	env["SCION_AGENT_NAME"] = agentName
 	return env
@@ -80,14 +42,6 @@ func (g *Generic) GetCommand(task string, resume bool, baseArgs []string) []stri
 		args = append(args, task)
 	}
 	return args
-}
-
-func (g *Generic) PropagateFiles(homeDir, unixUsername string, auth api.AuthConfig) error {
-	return nil
-}
-
-func (g *Generic) GetVolumes(unixUsername string, auth api.AuthConfig) []api.VolumeMount {
-	return nil
 }
 
 func (g *Generic) DefaultConfigDir() string {

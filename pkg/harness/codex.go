@@ -31,18 +31,7 @@ func (c *Codex) Name() string {
 	return "codex"
 }
 
-func (c *Codex) DiscoverAuth(agentHome string) api.AuthConfig {
-	auth := api.AuthConfig{}
-	// Check for Codex auth file in standard location
-	home, _ := os.UserHomeDir()
-	authPath := filepath.Join(home, ".codex", "auth.json")
-	if _, err := os.Stat(authPath); err == nil {
-		auth.CodexAuthFile = authPath
-	}
-	return auth
-}
-
-func (c *Codex) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
+func (c *Codex) GetEnv(agentName string, agentHome string, unixUsername string) map[string]string {
 	return map[string]string{}
 }
 
@@ -60,14 +49,6 @@ func (c *Codex) GetCommand(task string, resume bool, baseArgs []string) []string
 	return args
 }
 
-func (c *Codex) PropagateFiles(homeDir, unixUsername string, auth api.AuthConfig) error {
-	return nil
-}
-
-func (c *Codex) GetVolumes(unixUsername string, auth api.AuthConfig) []api.VolumeMount {
-	return nil
-}
-
 func (c *Codex) DefaultConfigDir() string {
 	return ""
 }
@@ -77,8 +58,7 @@ func (c *Codex) HasSystemPrompt(agentHome string) bool {
 }
 
 func (c *Codex) Provision(ctx context.Context, agentName, agentHome, agentWorkspace string) error {
-	auth := c.DiscoverAuth(agentHome)
-	return c.PropagateFiles(agentHome, "", auth)
+	return nil
 }
 
 func (c *Codex) GetEmbedDir() string {

@@ -314,48 +314,6 @@ func TestBuildPod_GKEFallback_NoRefs(t *testing.T) {
 	}
 }
 
-func TestBuildPod_M1AuthFallback(t *testing.T) {
-	rt, _, _ := newTestK8sRuntime()
-
-	config := RunConfig{
-		Name:         "test-agent",
-		Image:        "test:latest",
-		UnixUsername: "scion",
-		Auth: api.AuthConfig{
-			GeminiAPIKey:    "gemini-key",
-			AnthropicAPIKey: "anthropic-key",
-			GoogleAPIKey:    "google-key",
-		},
-	}
-
-	pod := rt.buildPod("default", config)
-
-	// M1 fallback: literal env var values
-	foundGemini := false
-	foundAnthropic := false
-	foundGoogle := false
-	for _, env := range pod.Spec.Containers[0].Env {
-		if env.Name == "GEMINI_API_KEY" && env.Value == "gemini-key" {
-			foundGemini = true
-		}
-		if env.Name == "ANTHROPIC_API_KEY" && env.Value == "anthropic-key" {
-			foundAnthropic = true
-		}
-		if env.Name == "GOOGLE_API_KEY" && env.Value == "google-key" {
-			foundGoogle = true
-		}
-	}
-	if !foundGemini {
-		t.Error("expected GEMINI_API_KEY literal env var in M1 fallback")
-	}
-	if !foundAnthropic {
-		t.Error("expected ANTHROPIC_API_KEY literal env var in M1 fallback")
-	}
-	if !foundGoogle {
-		t.Error("expected GOOGLE_API_KEY literal env var in M1 fallback")
-	}
-}
-
 func TestBuildPod_NoSecrets(t *testing.T) {
 	rt, _, _ := newTestK8sRuntime()
 
@@ -603,33 +561,3 @@ func TestCreateSecretProviderClass_NoRefs(t *testing.T) {
 	}
 }
 
-func TestBuildPod_ResolvedSecretsOverrideM1Auth(t *testing.T) {
-	rt, _, _ := newTestK8sRuntime()
-
-	// When both ResolvedSecrets and Auth are present, ResolvedSecrets should win
-	config := RunConfig{
-		Name:         "test-agent",
-		Image:        "test:latest",
-		UnixUsername: "scion",
-		ResolvedSecrets: []api.ResolvedSecret{
-			{Name: "GEMINI_API_KEY", Type: "environment", Target: "GEMINI_API_KEY", Value: "new-key", Source: "user"},
-		},
-		Auth: api.AuthConfig{
-			GeminiAPIKey: "old-key",
-		},
-	}
-
-	pod := rt.buildPod("default", config)
-
-	for _, env := range pod.Spec.Containers[0].Env {
-		if env.Name == "GEMINI_API_KEY" {
-			// Should be from secretKeyRef (resolved secrets path), not a literal value
-			if env.Value == "old-key" {
-				t.Error("M1 auth should not be used when ResolvedSecrets are present")
-			}
-			if env.ValueFrom == nil || env.ValueFrom.SecretKeyRef == nil {
-				t.Error("GEMINI_API_KEY should use secretKeyRef when ResolvedSecrets present")
-			}
-		}
-	}
-}

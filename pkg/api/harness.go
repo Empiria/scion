@@ -22,11 +22,8 @@ import (
 // Harness interface defines the methods a harness must implement
 type Harness interface {
 	Name() string
-	DiscoverAuth(agentHome string) AuthConfig
-	GetEnv(agentName string, agentHome string, unixUsername string, auth AuthConfig) map[string]string
+	GetEnv(agentName string, agentHome string, unixUsername string) map[string]string
 	GetCommand(task string, resume bool, baseArgs []string) []string
-	PropagateFiles(homeDir, unixUsername string, auth AuthConfig) error
-	GetVolumes(unixUsername string, auth AuthConfig) []VolumeMount
 	DefaultConfigDir() string
 	HasSystemPrompt(agentHome string) bool
 

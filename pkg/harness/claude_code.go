@@ -36,14 +36,7 @@ func (c *ClaudeCode) Name() string {
 	return "claude"
 }
 
-func (c *ClaudeCode) DiscoverAuth(agentHome string) api.AuthConfig {
-	// Placeholder for Claude specific auth discovery
-	return api.AuthConfig{
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
-	}
-}
-
-func (c *ClaudeCode) GetEnv(agentName string, agentHome string, unixUsername string, auth api.AuthConfig) map[string]string {
+func (c *ClaudeCode) GetEnv(agentName string, agentHome string, unixUsername string) map[string]string {
 	env := make(map[string]string)
 
 	// Load system prompt content for use in GetCommand.
@@ -67,14 +60,6 @@ func (c *ClaudeCode) GetCommand(task string, resume bool, baseArgs []string) []s
 		args = append(args, task)
 	}
 	return args
-}
-
-func (c *ClaudeCode) PropagateFiles(homeDir, unixUsername string, auth api.AuthConfig) error {
-	return nil
-}
-
-func (c *ClaudeCode) GetVolumes(unixUsername string, auth api.AuthConfig) []api.VolumeMount {
-	return nil
 }
 
 func (c *ClaudeCode) DefaultConfigDir() string {
