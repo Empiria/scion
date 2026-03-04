@@ -264,7 +264,9 @@ export class ScionPageTerminal extends LitElement {
       this.agentName = agent.name;
 
       if (!isTerminalAvailable(agent)) {
-        this.error = `Agent phase is ${agent.phase}. Terminal is not available until the agent has started.`;
+        this.error = agent.activity === 'offline'
+          ? 'Agent is offline. Terminal is not available while the agent is unreachable.'
+          : `Agent phase is ${agent.phase}. Terminal is not available until the agent has started.`;
         this.loading = false;
         return;
       }

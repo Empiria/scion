@@ -170,9 +170,11 @@ export interface AgentDetail {
 
 /**
  * Whether an agent's terminal is accessible.
- * Terminal is available when the agent is in running or stopping phase.
+ * Terminal is available when the agent is in running or stopping phase
+ * and not offline.
  */
 export function isTerminalAvailable(agent: Agent): boolean {
+  if (agent.activity === 'offline') return false;
   return agent.phase === 'running' || agent.phase === 'stopping';
 }
 
