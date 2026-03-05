@@ -221,6 +221,32 @@ func runInit(args []string) int {
 			log.Debug("Could not look up user for UID %d: %v", targetUID, err)
 		}
 	}
+	// Workaround: On Apple Virtualization Framework runtimes, Claude Code
+	// creates a dangling symlink at ~/.claude/debug/latest that causes
+	// container removal to hang. Pre-create the debug directory as
+	// root-owned so the scion user process cannot write into it.
+	if isClaude(childArgs) {
+		claudeDir := filepath.Join(agentHome, ".claude")
+		debugDir := filepath.Join(claudeDir, "debug")
+		if err := os.MkdirAll(debugDir, 0755); err != nil {
+			log.Debug("Failed to create debug directory %s: %v", debugDir, err)
+		} else {
+			// Ensure the parent .claude directory is owned by the agent
+			// user so that Claude Code can write its config there.
+			if targetUID != 0 {
+				if err := os.Chown(claudeDir, targetUID, targetGID); err != nil {
+					log.Debug("Failed to chown %s: %v", claudeDir, err)
+				}
+			}
+			// Ensure root ownership on the debug directory so the scion
+			// user cannot create symlinks inside it.
+			if err := os.Chown(debugDir, 0, 0); err != nil {
+				log.Debug("Failed to chown debug directory to root: %v", err)
+			}
+			log.Info("Created root-owned debug directory %s (apple-container workaround)", debugDir)
+		}
+	}
+
 	servicesPath := filepath.Join(agentHome, ".scion", "scion-services.yaml")
 	log.Debug("Looking for services config at: %s", servicesPath)
 	if data, err := os.ReadFile(servicesPath); err == nil {
@@ -784,6 +810,15 @@ func buildAuthenticatedURL(cloneURL, token string) string {
 
 	parsed.User = url.UserPassword("oauth2", token)
 	return parsed.String()
+}
+
+// isClaude returns true when the child command is for the Claude Code harness.
+func isClaude(childArgs []string) bool {
+	if len(childArgs) == 0 {
+		return false
+	}
+	base := filepath.Base(childArgs[0])
+	return base == "claude" || strings.HasPrefix(base, "claude-")
 }
 
 // isWorkspaceEmpty returns true if the directory doesn't exist or contains no entries.

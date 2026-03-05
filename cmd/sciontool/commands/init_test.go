@@ -358,6 +358,30 @@ func TestUseDirectPasswdEdit(t *testing.T) {
 	}
 }
 
+func TestIsClaude(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected bool
+	}{
+		{name: "claude binary", args: []string{"claude"}, expected: true},
+		{name: "claude with args", args: []string{"claude", "--model", "opus"}, expected: true},
+		{name: "full path to claude", args: []string{"/usr/local/bin/claude"}, expected: true},
+		{name: "claude-code variant", args: []string{"claude-code"}, expected: true},
+		{name: "gemini binary", args: []string{"gemini"}, expected: false},
+		{name: "bash command", args: []string{"bash", "-c", "echo hello"}, expected: false},
+		{name: "empty args", args: []string{}, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isClaude(tt.args); got != tt.expected {
+				t.Errorf("isClaude(%v) = %v, want %v", tt.args, got, tt.expected)
+			}
+		})
+	}
+}
+
 func TestGitCloneWorkspace_DefaultEnvValues(t *testing.T) {
 	// Set SCION_GIT_CLONE_URL to trigger the clone path, but use a URL
 	// that will cause a predictable early failure (non-existent host).
