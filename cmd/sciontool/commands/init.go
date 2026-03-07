@@ -432,6 +432,13 @@ func runInit(args []string) int {
 		} else {
 			log.Info("Limits initialized: max_turns=%d, max_model_calls=%d", maxTurns, maxModelCalls)
 		}
+		// Chown the limits file so the scion user (hook processes) can read/write it.
+		// Init runs as root but hooks run as the dropped-privilege scion user.
+		if targetUID != 0 {
+			if err := os.Chown(limitsPath, targetUID, targetGID); err != nil {
+				log.Error("Failed to chown agent-limits.json: %v", err)
+			}
+		}
 		// Remove stale trigger file from a previous run
 		os.Remove(handlers.LimitsTriggerFile)
 	}
