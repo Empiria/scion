@@ -7,7 +7,8 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 
-import type { Grove, RuntimeBroker, Template } from '../../shared/types.js';
+import type { Agent, Grove, RuntimeBroker, Template } from '../../shared/types.js';
+import { apiFetch } from '../../client/api.js';
 import '../shared/status-badge.js';
 
 @customElement('scion-page-agent-create')
@@ -60,6 +61,9 @@ export class ScionPageAgentCreate extends LitElement {
 
   @state()
   private telemetryEnabled = false;
+
+  /** ID of an existing agent we're editing (came back from configure page) */
+  private editingAgentId: string | null = null;
 
   /** Whether the groveId was explicitly passed via URL query param (user navigated from grove page) */
   private groveFromUrl = false;
@@ -250,13 +254,20 @@ export class ScionPageAgentCreate extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
 
-    // Pre-select groveId from URL query param if present
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
+
+      // Pre-select groveId from URL query param if present
       const groveParam = params.get('groveId');
       if (groveParam) {
         this.groveId = groveParam;
         this.groveFromUrl = true;
+      }
+
+      // Check if returning from configure page with an existing agent
+      const editingParam = params.get('editingAgentId');
+      if (editingParam) {
+        this.editingAgentId = editingParam;
       }
     }
 
@@ -301,25 +312,30 @@ export class ScionPageAgentCreate extends LitElement {
         this.telemetryEnabled = data.telemetryEnabled ?? false;
       }
 
-      // Auto-select first grove if none selected
-      if (!this.groveId && this.groves.length > 0) {
-        this.groveId = this.groves[0].id;
-      }
+      // If returning from configure page, populate form from existing agent
+      if (this.editingAgentId) {
+        await this.populateFromAgent(this.editingAgentId);
+      } else {
+        // Auto-select first grove if none selected
+        if (!this.groveId && this.groves.length > 0) {
+          this.groveId = this.groves[0].id;
+        }
 
-      // Auto-select broker based on grove's default
-      this.selectBrokerForGrove();
+        // Auto-select broker based on grove's default
+        this.selectBrokerForGrove();
 
-      // Auto-select default template if available
-      if (!this.templateId) {
-        const defaultTemplate = this.templates.find(
-          (t) => t.slug === 'default' || t.name === 'default'
-        );
-        if (defaultTemplate) {
-          this.templateId = defaultTemplate.id;
-          this.harness = defaultTemplate.harness || 'gemini';
-        } else if (this.templates.length > 0) {
-          this.templateId = this.templates[0].id;
-          this.harness = this.templates[0].harness || 'gemini';
+        // Auto-select default template if available
+        if (!this.templateId) {
+          const defaultTemplate = this.templates.find(
+            (t) => t.slug === 'default' || t.name === 'default'
+          );
+          if (defaultTemplate) {
+            this.templateId = defaultTemplate.id;
+            this.harness = defaultTemplate.harness || 'gemini';
+          } else if (this.templates.length > 0) {
+            this.templateId = this.templates[0].id;
+            this.harness = this.templates[0].harness || 'gemini';
+          }
         }
       }
     } catch (err) {
@@ -345,6 +361,12 @@ export class ScionPageAgentCreate extends LitElement {
     this.error = null;
 
     try {
+      // If returning from configure, delete the old agent first
+      if (this.editingAgentId) {
+        await this.deleteEditingAgent();
+        this.editingAgentId = null;
+      }
+
       const body: Record<string, unknown> = {
         name: this.name.trim(),
         groveId: this.groveId,
@@ -443,6 +465,12 @@ export class ScionPageAgentCreate extends LitElement {
     this.error = null;
 
     try {
+      // If returning from configure, delete the old agent first
+      if (this.editingAgentId) {
+        await this.deleteEditingAgent();
+        this.editingAgentId = null;
+      }
+
       const body: Record<string, unknown> = {
         name: this.name.trim(),
         groveId: this.groveId,
@@ -526,6 +554,44 @@ export class ScionPageAgentCreate extends LitElement {
       this.brokerId = onlineBroker.id;
     } else if (this.brokers.length > 0) {
       this.brokerId = this.brokers[0].id;
+    }
+  }
+
+  /**
+   * Populate form fields from an existing agent (when returning from configure page).
+   */
+  private async populateFromAgent(agentId: string): Promise<void> {
+    try {
+      const res = await apiFetch(`/api/v1/agents/${agentId}`);
+      if (!res.ok) {
+        // Agent may have been deleted; clear editing state and fall back to defaults
+        this.editingAgentId = null;
+        return;
+      }
+      const data = (await res.json()) as { agent?: Agent } | Agent;
+      const agent: Agent = 'agent' in data && data.agent ? data.agent : data as Agent;
+
+      this.name = agent.name || '';
+      this.groveId = agent.groveId || '';
+      if (agent.harnessConfig) this.harness = agent.harnessConfig;
+      if (agent.harnessAuth) this.harnessAuth = agent.harnessAuth;
+      if (agent.template) this.templateId = agent.template;
+      if (agent.runtimeBrokerId) this.brokerId = agent.runtimeBrokerId;
+    } catch {
+      // If fetch fails, clear editing state
+      this.editingAgentId = null;
+    }
+  }
+
+  /**
+   * Delete the agent being edited (used when cancelling after returning from configure).
+   */
+  private async deleteEditingAgent(): Promise<void> {
+    if (!this.editingAgentId) return;
+    try {
+      await apiFetch(`/api/v1/agents/${this.editingAgentId}`, { method: 'DELETE' });
+    } catch {
+      // Best-effort deletion; navigate away regardless
     }
   }
 
@@ -732,11 +798,20 @@ export class ScionPageAgentCreate extends LitElement {
               <sl-icon slot="prefix" name="play-circle"></sl-icon>
               Create &amp; Start Agent
             </sl-button>
-            <a href="${this.sourceGrove ? `/groves/${this.sourceGrove.id}` : '/agents'}" style="text-decoration: none;">
-              <sl-button variant="default" ?disabled=${this.submitting || this.submittingEdit}>
-                Cancel
-              </sl-button>
-            </a>
+            <sl-button
+              variant="default"
+              ?disabled=${this.submitting || this.submittingEdit}
+              @click=${async () => {
+                if (this.editingAgentId) {
+                  await this.deleteEditingAgent();
+                }
+                const dest = this.sourceGrove ? `/groves/${this.sourceGrove.id}` : '/agents';
+                window.history.pushState({}, '', dest);
+                window.dispatchEvent(new PopStateEvent('popstate'));
+              }}
+            >
+              Cancel
+            </sl-button>
           </div>
         </div>
       </div>

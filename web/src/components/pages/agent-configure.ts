@@ -627,6 +627,19 @@ export class ScionPageAgentConfigure extends LitElement {
         <div class="form-actions">
           <sl-button
             variant="default"
+            ?disabled=${isBusy}
+            @click=${() => {
+              const url = new URL('/agents/new', window.location.origin);
+              url.searchParams.set('editingAgentId', this.agentId);
+              window.history.pushState({}, '', url.toString());
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+          >
+            <sl-icon slot="prefix" name="arrow-left"></sl-icon>
+            Back
+          </sl-button>
+          <sl-button
+            variant="default"
             ?loading=${this.saving}
             ?disabled=${isBusy}
             @click=${() => this.handleSave()}
