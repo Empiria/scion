@@ -254,8 +254,15 @@ export class StateManager extends EventTarget {
       this.state.agents.delete(agentId);
       this.state.deletedAgentIds.add(agentId);
     } else {
-      // Merge delta into existing agent state
-      const existing = this.state.agents.get(agentId) || ({} as Agent);
+      // For non-created events, only merge into agents already in state.
+      // This prevents partial status deltas from creating incomplete rows
+      // for agents the client hasn't seen yet. New agents arrive via
+      // 'created' events which carry the full snapshot.
+      const existing = this.state.agents.get(agentId);
+      if (!existing && eventType !== 'created') {
+        return;
+      }
+      const base = existing || ({} as Agent);
       const delta = data as Partial<Agent>;
       // Preserve sticky activities: if the incoming activity is idle/empty
       // but the existing activity is sticky, keep the existing value.
@@ -263,8 +270,8 @@ export class StateManager extends EventTarget {
       if (
         incomingActivity !== undefined &&
         (incomingActivity === 'idle' || incomingActivity === '') &&
-        existing.activity &&
-        STICKY_ACTIVITIES.has(existing.activity)
+        base.activity &&
+        STICKY_ACTIVITIES.has(base.activity)
       ) {
         delete delta.activity;
       }
@@ -282,11 +289,11 @@ export class StateManager extends EventTarget {
         }
       }
       // Ensure id is always set
-      const updated = { ...existing, ...delta, id: agentId };
+      const updated = { ...base, ...delta, id: agentId };
       // Preserve _capabilities from existing state when the delta doesn't
       // provide valid capabilities (SSE status deltas typically omit them).
-      if (!delta._capabilities && existing._capabilities) {
-        updated._capabilities = existing._capabilities;
+      if (!delta._capabilities && base._capabilities) {
+        updated._capabilities = base._capabilities;
       }
       this.state.agents.set(agentId, updated as Agent);
     }

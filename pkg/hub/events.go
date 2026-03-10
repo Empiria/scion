@@ -85,12 +85,23 @@ type AgentStatusEvent struct {
 }
 
 // AgentCreatedEvent is published when an agent is created.
+// Unlike status deltas this carries the full agent snapshot so that
+// subscribers can render a complete row without an extra REST fetch.
 type AgentCreatedEvent struct {
-	AgentID  string `json:"agentId"`
-	GroveID  string `json:"groveId"`
-	Name     string `json:"name"`
-	Slug     string `json:"slug"`
-	Template string `json:"template,omitempty"`
+	AgentID         string `json:"agentId"`
+	GroveID         string `json:"groveId"`
+	Name            string `json:"name"`
+	Slug            string `json:"slug"`
+	Template        string `json:"template,omitempty"`
+	Phase           string `json:"phase,omitempty"`
+	Activity        string `json:"activity,omitempty"`
+	ContainerStatus string `json:"containerStatus,omitempty"`
+	Image           string `json:"image,omitempty"`
+	Runtime         string `json:"runtime,omitempty"`
+	RuntimeBrokerID string `json:"runtimeBrokerId,omitempty"`
+	CreatedBy       string `json:"createdBy,omitempty"`
+	Visibility      string `json:"visibility,omitempty"`
+	Created         string `json:"created,omitempty"`
 }
 
 // AgentDeletedEvent is published when an agent is deleted.
@@ -273,11 +284,22 @@ func (p *ChannelEventPublisher) PublishAgentStatus(_ context.Context, agent *sto
 // and grove-scoped subjects (dual-publish pattern).
 func (p *ChannelEventPublisher) PublishAgentCreated(_ context.Context, agent *store.Agent) {
 	evt := AgentCreatedEvent{
-		AgentID:  agent.ID,
-		GroveID:  agent.GroveID,
-		Name:     agent.Name,
-		Slug:     agent.Slug,
-		Template: agent.Template,
+		AgentID:         agent.ID,
+		GroveID:         agent.GroveID,
+		Name:            agent.Name,
+		Slug:            agent.Slug,
+		Template:        agent.Template,
+		Phase:           agent.Phase,
+		Activity:        agent.Activity,
+		ContainerStatus: agent.ContainerStatus,
+		Image:           agent.Image,
+		Runtime:         agent.Runtime,
+		RuntimeBrokerID: agent.RuntimeBrokerID,
+		CreatedBy:       agent.CreatedBy,
+		Visibility:      agent.Visibility,
+	}
+	if !agent.Created.IsZero() {
+		evt.Created = agent.Created.Format("2006-01-02T15:04:05Z07:00")
 	}
 	p.publish("agent."+agent.ID+".created", evt)
 	if agent.GroveID != "" {

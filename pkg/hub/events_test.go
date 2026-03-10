@@ -154,11 +154,19 @@ func TestChannelEventPublisher_PublishAgentCreated(t *testing.T) {
 	defer unsub2()
 
 	agent := &store.Agent{
-		ID:       "a1",
-		GroveID:  "g1",
-		Name:     "test-agent",
-		Slug:     "test-agent",
-		Template: "claude",
+		ID:              "a1",
+		GroveID:         "g1",
+		Name:            "test-agent",
+		Slug:            "test-agent",
+		Template:        "claude",
+		Phase:           "created",
+		Activity:        "idle",
+		ContainerStatus: "running",
+		Image:           "scion-claude:latest",
+		Runtime:         "docker",
+		RuntimeBrokerID: "b1",
+		CreatedBy:       "user1",
+		Visibility:      "private",
 	}
 
 	pub.PublishAgentCreated(context.Background(), agent)
@@ -170,7 +178,13 @@ func TestChannelEventPublisher_PublishAgentCreated(t *testing.T) {
 			t.Fatalf("unmarshal: %v", err)
 		}
 		if data.AgentID != "a1" || data.Name != "test-agent" || data.Template != "claude" {
-			t.Errorf("unexpected event data: %+v", data)
+			t.Errorf("unexpected identity data: %+v", data)
+		}
+		if data.Phase != "created" || data.Activity != "idle" || data.ContainerStatus != "running" {
+			t.Errorf("unexpected status data: %+v", data)
+		}
+		if data.Image != "scion-claude:latest" || data.Runtime != "docker" || data.RuntimeBrokerID != "b1" {
+			t.Errorf("unexpected runtime data: %+v", data)
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for agent created event")
