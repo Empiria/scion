@@ -13,6 +13,8 @@ This guide covers the steps to install and configure Scion on your local machine
 Scion is written in Go. You need Go 1.22 or later installed.
 - [Download and install Go](https://golang.org/doc/install)
 
+While a binary may be available from the github releases page, this is an active project and it is currently best to regularly build from source.
+
 ### 2. Container Runtime
 Scion requires a container runtime to manage agents. You can use either Docker or the Apple Virtualization Framework (experimental).
 
@@ -60,7 +62,7 @@ go install github.com/GoogleCloudPlatform/scion/cmd/scion@latest
 
 Ensure your `$GOPATH/bin` (typically `~/go/bin`) is in your system `$PATH`.
 
-### From Binary
+### From Clone
 If you have the repository cloned, you can use the provided `Makefile`:
 
 ```bash
@@ -78,25 +80,40 @@ scion version
 
 ---
 
+## Build container images
+
+No publicly hosted images are currently available for Scion, but quick and easy build scripts are included.
+
+The easiest way to get these images is to fork this repo, and then go to the "Actions" tab and select the "Build Scion Images" workflow.
+
+You will then use your `ghcr.io/myorg` registry for the scion setting.
+
+See [Building Containers](../advanced-local/custom-images) for more details
+
 ## Configuration
 
-### 1. Initialize a Grove
+### 1. Initialize your machine
+You must first establish global settings, templates and configs for your machine
+
+```bash
+scion init --machine
+```
+
+This creates a directory at `~/.scion`
+
+You will be prompted for the image registry where you built and deployed images.
+
+### 2. Initialize a Grove
 Navigate to the root of a project where you want to use Scion and run:
 
 ```bash
 scion init
 ```
 
-This creates a `.scion` directory in your project root containing:
-- `settings.yaml`: Grove-specific settings.
-- `templates/`: Default agent templates (gemini, claude, etc.).
+This creates a `.scion` marker file in the directory, linking it to structures inside the global folder created on the machine initialization.
 
-**Note:** If you are in a git repository, it is recommended to add `.scion/agents` to your `.gitignore` to avoid issues with nested git worktrees:
-```bash
-echo ".scion/agents" >> .gitignore
-```
 
-### 2. Agent Authentication (LLM Access)
+### 3. Agent Authentication (LLM Access)
 
 Before starting an agent, you must provide credentials so the underlying LLM harness (Claude, Gemini, etc.) can authenticate with its model provider.
 
@@ -112,7 +129,7 @@ export GEMINI_API_KEY="your-api-key"
 
 Scion also supports Vertex AI (via Application Default Credentials) and OAuth token files. For advanced credential configurations, including Hub-based secret injection, see [Agent Credentials](../advanced-local/agent-credentials).
 
-### 3. Select Runtime
+### 4. Select Runtime
 Scion automatically selects the appropriate runtime based on your operating system:
 - **macOS**: Defaults to `container` (Apple Virtualization Framework).
 - **Linux/Windows**: Defaults to `docker` (or `podman` if Docker is missing).
