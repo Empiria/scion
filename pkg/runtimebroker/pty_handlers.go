@@ -25,16 +25,47 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
 	"github.com/GoogleCloudPlatform/scion/pkg/wsprotocol"
 )
 
+const (
+	tmuxSessionWaitTimeout  = 30 * time.Second
+	tmuxSessionPollInterval = 500 * time.Millisecond
+)
+
 // PTY endpoint configuration
 const (
 	ptyMaxDataSize = 32 * 1024 // 32KB max per message
 )
+
+// waitForTmuxSession polls the container until the tmux session "scion" is
+// available. After starting a container, sciontool init needs time to set up
+// the user, run pre-start hooks, and launch the tmux session. Without this
+// wait, an immediate attach would fail with "no sessions".
+func waitForTmuxSession(ctx context.Context, runtimeCmd, containerID string) error {
+	ctx, cancel := context.WithTimeout(ctx, tmuxSessionWaitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(tmuxSessionPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for tmux session in container '%s' to become ready", containerID)
+		case <-ticker.C:
+			cmd := exec.CommandContext(ctx, runtimeCmd, "exec", "--user", "scion", containerID, "tmux", "has-session", "-t", "scion")
+			if err := cmd.Run(); err == nil {
+				return nil
+			}
+			slog.Debug("Waiting for tmux session", "containerID", containerID, "runtime", runtimeCmd)
+		}
+	}
+}
 
 var ptyUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
@@ -192,6 +223,11 @@ func (s *LocalPTYSession) Run() error {
 
 // startDockerExec starts a docker exec session with tmux attach using a real PTY.
 func (s *LocalPTYSession) startDockerExec() error {
+	// Wait for the tmux session to be ready before attaching
+	if err := waitForTmuxSession(s.ctx, "docker", s.containerID); err != nil {
+		return err
+	}
+
 	// We need BOTH:
 	// 1. -it flags: tell Docker to allocate a TTY inside the container
 	// 2. pty.StartWithSize: allocate a PTY on the broker side for proper terminal handling
@@ -408,6 +444,11 @@ func (h *StreamPTYHandler) startDockerExec() error {
 	runtimeCmd := h.runtimeCmd
 	if runtimeCmd == "" {
 		runtimeCmd = "docker"
+	}
+
+	// Wait for the tmux session to be ready before attaching
+	if err := waitForTmuxSession(h.ctx, runtimeCmd, h.containerID); err != nil {
+		return err
 	}
 
 	// We need BOTH:
