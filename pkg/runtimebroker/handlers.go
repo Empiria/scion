@@ -2009,6 +2009,10 @@ func (s *Server) finalizeEnv(w http.ResponseWriter, r *http.Request, id string) 
 		if gc.Depth > 0 {
 			pending.MergedEnv["SCION_GIT_DEPTH"] = strconv.Itoa(gc.Depth)
 		}
+		// Pass user-specified agent branch name for the feature branch
+		if origReq.Config.Branch != "" {
+			pending.MergedEnv["SCION_AGENT_BRANCH"] = origReq.Config.Branch
+		}
 		opts.Workspace = ""
 		opts.GrovePath = ""
 		opts.GitClone = gc
