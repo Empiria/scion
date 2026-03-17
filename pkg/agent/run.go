@@ -162,9 +162,19 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 	// inside templates (§3.4 of agnostic-template-design).
 	if harnessConfigName != "" {
 		var templatePaths []string
+		// Prefer opts.Template when it is an absolute path (e.g. hydrated
+		// template cache path from the broker). The display name stored in
+		// finalScionCfg.Info.Template (e.g. "web-dev") may not resolve in
+		// the grove, but the original opts.Template path points to the
+		// actual template directory containing harness-configs/.
 		templateName := ""
-		if finalScionCfg != nil && finalScionCfg.Info != nil {
-			templateName = finalScionCfg.Info.Template
+		if opts.Template != "" && filepath.IsAbs(opts.Template) {
+			templateName = opts.Template
+		}
+		if templateName == "" {
+			if finalScionCfg != nil && finalScionCfg.Info != nil {
+				templateName = finalScionCfg.Info.Template
+			}
 		}
 		if templateName == "" {
 			templateName = opts.Template

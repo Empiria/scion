@@ -752,6 +752,77 @@ profiles:
 	}
 }
 
+func TestStartResolvesHarnessConfigUserFromAbsTemplateDir(t *testing.T) {
+	// Regression test: when opts.Template is an absolute path (e.g. a hydrated
+	// template from the broker's template cache), the harness-config bundled
+	// inside the template must be found and its User field applied. Previously,
+	// the template path lookup in Start used the display name from agent-info.json
+	// which could not be resolved in the grove, causing FindHarnessConfigDir to
+	// miss the template-bundled harness config and defaulting to user "root".
+	tmpDir := t.TempDir()
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpDir)
+
+	globalScionDir := filepath.Join(tmpDir, ".scion")
+
+	// Create a template at an absolute path (simulating hydrated template cache)
+	// with a bundled harness-config that has user: scion
+	hydratedTplDir := filepath.Join(tmpDir, "template-cache", "web-dev")
+	hcDir := filepath.Join(hydratedTplDir, "harness-configs", "claude-web")
+	os.MkdirAll(hcDir, 0755)
+	os.WriteFile(filepath.Join(hcDir, "config.yaml"), []byte("harness: claude\nuser: scion\nimage: scion-claude:latest\n"), 0644)
+	os.MkdirAll(filepath.Join(hcDir, "home"), 0755)
+	os.WriteFile(filepath.Join(hydratedTplDir, "scion-agent.json"), []byte(`{"default_harness_config": "claude-web"}`), 0644)
+
+	// Minimal global settings (no harness_configs defined)
+	os.MkdirAll(globalScionDir, 0755)
+	os.WriteFile(filepath.Join(globalScionDir, "settings.yaml"), []byte(`schema_version: "1"
+active_profile: local
+profiles:
+  local:
+    runtime: docker
+`), 0644)
+
+	// Create project grove
+	projectDir := filepath.Join(tmpDir, "project")
+	projectScionDir := filepath.Join(projectDir, ".scion")
+	os.MkdirAll(projectScionDir, 0755)
+
+	// Capture the RunConfig
+	var capturedConfig runtime.RunConfig
+	mockRT := &runtime.MockRuntime{
+		ListFunc: func(ctx context.Context, labelFilter map[string]string) ([]api.AgentInfo, error) {
+			return []api.AgentInfo{}, nil
+		},
+		RunFunc: func(ctx context.Context, config runtime.RunConfig) (string, error) {
+			capturedConfig = config
+			return "mock-id", nil
+		},
+	}
+
+	mgr := NewManager(mockRT)
+
+	_, err := mgr.Start(context.Background(), api.StartOptions{
+		Name:      "test-agent",
+		Template:  hydratedTplDir, // absolute path, simulating hydrated template
+		GrovePath: projectScionDir,
+		NoAuth:    true,
+	})
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+
+	if capturedConfig.UnixUsername != "scion" {
+		t.Errorf("expected UnixUsername = %q, got %q", "scion", capturedConfig.UnixUsername)
+	}
+}
+
 func TestStartReturnsRunningStatus(t *testing.T) {
 	// This tests the early-return path when a container is already running.
 	// The runtime's List() may return a stale Status (e.g. "created") from the
