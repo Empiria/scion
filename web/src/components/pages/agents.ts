@@ -83,6 +83,12 @@ export class ScionPageAgents extends LitElement {
   @state()
   private viewMode: ViewMode = 'grid';
 
+  /**
+   * Whether to show only agents in the user's groves or created by the user
+   */
+  @state()
+  private showMineOnly = false;
+
   static override styles = [
     listPageStyles,
     css`
@@ -159,6 +165,14 @@ export class ScionPageAgents extends LitElement {
         display: flex;
         gap: 0.375rem;
         justify-content: flex-end;
+      }
+
+      .filter-toggle {
+        display: inline-flex;
+      }
+
+      .filter-toggle sl-button::part(base) {
+        font-size: 0.8125rem;
       }
     `,
   ];
@@ -248,7 +262,8 @@ export class ScionPageAgents extends LitElement {
   }
 
   private async fetchAndMergeAgents(): Promise<void> {
-    const response = await apiFetch('/api/v1/agents');
+    const url = this.showMineOnly ? '/api/v1/agents?mine=true' : '/api/v1/agents';
+    const response = await apiFetch(url);
 
     if (!response.ok) {
       const errorData = (await response.json().catch(() => ({}))) as { message?: string };
@@ -389,11 +404,28 @@ export class ScionPageAgents extends LitElement {
     this.viewMode = e.detail.view;
   }
 
+  private toggleMineOnly(): void {
+    this.showMineOnly = !this.showMineOnly;
+    void this.loadAgents();
+  }
+
   override render() {
     return html`
       <div class="header">
         <h1>Agents</h1>
         <div class="header-actions">
+          ${this.pageData?.user ? html`
+            <div class="filter-toggle">
+              <sl-button
+                size="small"
+                variant=${this.showMineOnly ? 'primary' : 'default'}
+                @click=${this.toggleMineOnly}
+              >
+                <sl-icon slot="prefix" name="person"></sl-icon>
+                My Agents
+              </sl-button>
+            </div>
+          ` : nothing}
           <scion-view-toggle
             .view=${this.viewMode}
             storageKey="scion-view-agents"
@@ -453,6 +485,15 @@ export class ScionPageAgents extends LitElement {
 
   private renderAgents() {
     if (this.agents.length === 0) {
+      if (this.showMineOnly) {
+        return html`
+          <div class="empty-state">
+            <sl-icon name="person"></sl-icon>
+            <h2>No Agents Found</h2>
+            <p>You don't have any agents in your groves yet.</p>
+          </div>
+        `;
+      }
       return this.renderEmptyState();
     }
 

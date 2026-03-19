@@ -151,6 +151,11 @@ type AgentFilter struct {
 	Phase           string
 	OwnerID         string
 	IncludeDeleted  bool // If true, include soft-deleted agents in results
+
+	// MemberOrOwnerGroveIDs, when non-empty, restricts results to agents
+	// whose grove_id is in this set OR whose owner_id matches OwnerID.
+	// OwnerID and this field are combined with OR (not AND) when both are set.
+	MemberOrOwnerGroveIDs []string
 }
 
 // AgentStatusUpdate contains fields for status-only updates.

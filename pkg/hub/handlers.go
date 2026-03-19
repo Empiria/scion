@@ -276,6 +276,17 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		IncludeDeleted:  query.Get("includeDeleted") == "true",
 	}
 
+	// mine=true: restrict to agents in groves the user owns/is a member of,
+	// plus agents the user personally created
+	if query.Get("mine") == "true" {
+		if userIdent := GetUserIdentityFromContext(ctx); userIdent != nil {
+			filter.OwnerID = userIdent.ID()
+			if groveIDs := s.resolveUserGroveIDs(ctx, userIdent.ID()); len(groveIDs) > 0 {
+				filter.MemberOrOwnerGroveIDs = groveIDs
+			}
+		}
+	}
+
 	limit := 50
 	if l := query.Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
@@ -2259,29 +2270,8 @@ func (s *Server) listGroves(w http.ResponseWriter, r *http.Request) {
 	if query.Get("mine") == "true" {
 		if userIdent := GetUserIdentityFromContext(ctx); userIdent != nil {
 			filter.OwnerID = userIdent.ID()
-			// Find grove IDs from the user's group memberships
-			if memberships, err := s.store.GetUserGroups(ctx, userIdent.ID()); err == nil {
-				groupIDs := make([]string, 0, len(memberships))
-				for _, m := range memberships {
-					groupIDs = append(groupIDs, m.GroupID)
-				}
-				if len(groupIDs) > 0 {
-					if groups, err := s.store.GetGroupsByIDs(ctx, groupIDs); err == nil {
-						groveIDSet := make(map[string]struct{})
-						for _, g := range groups {
-							if g.GroveID != "" {
-								groveIDSet[g.GroveID] = struct{}{}
-							}
-						}
-						groveIDs := make([]string, 0, len(groveIDSet))
-						for id := range groveIDSet {
-							groveIDs = append(groveIDs, id)
-						}
-						if len(groveIDs) > 0 {
-							filter.MemberOrOwnerIDs = groveIDs
-						}
-					}
-				}
+			if groveIDs := s.resolveUserGroveIDs(ctx, userIdent.ID()); len(groveIDs) > 0 {
+				filter.MemberOrOwnerIDs = groveIDs
 			}
 		}
 	}
@@ -4485,6 +4475,38 @@ func (s *Server) enrichGroveOwnerNames(ctx context.Context, groves []store.Grove
 			groves[i].OwnerName = name
 		}
 	}
+}
+
+// resolveUserGroveIDs returns grove IDs from the user's group memberships.
+// Groups with a non-empty GroveID represent grove membership.
+func (s *Server) resolveUserGroveIDs(ctx context.Context, userID string) []string {
+	memberships, err := s.store.GetUserGroups(ctx, userID)
+	if err != nil || len(memberships) == 0 {
+		return nil
+	}
+
+	groupIDs := make([]string, 0, len(memberships))
+	for _, m := range memberships {
+		groupIDs = append(groupIDs, m.GroupID)
+	}
+
+	groups, err := s.store.GetGroupsByIDs(ctx, groupIDs)
+	if err != nil {
+		return nil
+	}
+
+	groveIDSet := make(map[string]struct{})
+	for _, g := range groups {
+		if g.GroveID != "" {
+			groveIDSet[g.GroveID] = struct{}{}
+		}
+	}
+
+	groveIDs := make([]string, 0, len(groveIDSet))
+	for id := range groveIDSet {
+		groveIDs = append(groveIDs, id)
+	}
+	return groveIDs
 }
 
 // brokerHeartbeatRequest is the request body for broker heartbeats.

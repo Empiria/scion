@@ -1151,6 +1151,23 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 	var conditions []string
 	var args []interface{}
 
+	if len(filter.MemberOrOwnerGroveIDs) > 0 {
+		// Combine grove_id membership with owner_id match using OR
+		placeholders := make([]string, len(filter.MemberOrOwnerGroveIDs))
+		for i, id := range filter.MemberOrOwnerGroveIDs {
+			placeholders[i] = "?"
+			args = append(args, id)
+		}
+		orParts := []string{"grove_id IN (" + strings.Join(placeholders, ",") + ")"}
+		if filter.OwnerID != "" {
+			orParts = append(orParts, "owner_id = ?")
+			args = append(args, filter.OwnerID)
+		}
+		conditions = append(conditions, "("+strings.Join(orParts, " OR ")+")")
+	} else if filter.OwnerID != "" {
+		conditions = append(conditions, "owner_id = ?")
+		args = append(args, filter.OwnerID)
+	}
 	if filter.GroveID != "" {
 		conditions = append(conditions, "grove_id = ?")
 		args = append(args, filter.GroveID)
@@ -1162,10 +1179,6 @@ func (s *SQLiteStore) ListAgents(ctx context.Context, filter store.AgentFilter, 
 	if filter.Phase != "" {
 		conditions = append(conditions, "phase = ?")
 		args = append(args, filter.Phase)
-	}
-	if filter.OwnerID != "" {
-		conditions = append(conditions, "owner_id = ?")
-		args = append(args, filter.OwnerID)
 	}
 
 	// Exclude soft-deleted agents unless explicitly requested
