@@ -159,9 +159,9 @@ export interface Grove {
   createdAt: string;
   updatedAt: string;
   _capabilities?: Capabilities;
-  githubInstallationId?: number;
-  githubPermissions?: GitHubTokenPermissions;
-  githubAppStatus?: GitHubAppGroveStatus;
+  githubInstallationId?: number | undefined;
+  githubPermissions?: GitHubTokenPermissions | undefined;
+  githubAppStatus?: GitHubAppGroveStatus | undefined;
 }
 
 /**

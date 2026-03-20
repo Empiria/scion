@@ -49,9 +49,6 @@ export class ScionPageGitHubAppSetup extends LitElement {
   private error: string | null = null;
 
   @state()
-  private installationId: string | null = null;
-
-  @state()
   private discoveryResult: { total: number; matched: number } | null = null;
 
   @state()
@@ -59,9 +56,6 @@ export class ScionPageGitHubAppSetup extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-
-    const params = new URLSearchParams(window.location.search);
-    this.installationId = params.get('installation_id');
 
     this.initPage();
   }
