@@ -320,6 +320,18 @@ func (r *KubernetesRuntime) Run(ctx context.Context, config RunConfig) (string, 
 		}
 	}
 
+	// Reload tmux config: unlike Docker (where home is bind-mounted and
+	// available at startup), K8s syncs the home directory after the pod is
+	// running, so tmux starts without .tmux.conf. Tell tmux to source it
+	// now that it exists. Run as the scion user so tmux finds the session.
+	if config.HomeDir != "" {
+		tmuxConf := fmt.Sprintf("/home/%s/.tmux.conf", config.UnixUsername)
+		sourceCmd := fmt.Sprintf("su - %s -c 'test -f %s && tmux source-file %s || true'", config.UnixUsername, tmuxConf, tmuxConf)
+		if _, err := r.execInPod(ctx, namespace, createdPod.Name, []string{"sh", "-c", sourceCmd}); err != nil {
+			runtimeLog.Debug("Failed to reload tmux config (non-fatal)", "error", err)
+		}
+	}
+
 	runtimeLog.Info("Agent started successfully", "agent", createdPod.Name, "namespace", namespace, "phase", "complete")
 	fmt.Printf("Agent '%s' started successfully.\n", createdPod.Name)
 	return createdPod.Name, nil
