@@ -113,13 +113,10 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 
 	task := opts.Task
 
-	if !opts.Resume && task != "" && promptFileContent != "" && task != promptFileContent {
-		return nil, fmt.Errorf("task conflict: both prompt.md and start options provide a task")
-	}
-
 	if task == "" && !opts.Resume {
 		task = promptFileContent
-	} else if promptFileContent == "" && task != "" {
+	} else if task != "" {
+		// Explicit prompt always wins — write/overwrite prompt.md
 		_ = os.WriteFile(promptFile, []byte(task), 0644)
 	}
 
