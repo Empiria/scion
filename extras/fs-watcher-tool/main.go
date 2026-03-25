@@ -173,9 +173,10 @@ func run(cfg fswatcher.Config) error {
 			if err != nil || dir == "" {
 				return
 			}
-			if err := watcher.AddRoot(dir); err != nil {
+			added, err := watcher.AddRoot(dir)
+			if err != nil {
 				log.Printf("warning: failed to add watch for new container dir %s: %v", dir, err)
-			} else if cfg.Debug {
+			} else if added && cfg.Debug {
 				log.Printf("[grove] added watch for new container dir: %s", dir)
 			}
 		}

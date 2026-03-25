@@ -66,21 +66,21 @@ func NewWatcher(cfg Config, roots []string, filter *Filter, resolver *Resolver, 
 }
 
 // AddRoot adds a new watch directory at runtime (used for dynamic grove discovery).
-func (w *Watcher) AddRoot(dir string) error {
+func (w *Watcher) AddRoot(dir string) (bool, error) {
 	w.mu.Lock()
 	for _, r := range w.roots {
 		if r == dir {
 			w.mu.Unlock()
-			return nil
+			return false, nil
 		}
 	}
 	w.roots = append(w.roots, dir)
 	w.mu.Unlock()
 
 	if w.fanotifyFd > 0 {
-		return w.markDirectory(dir)
+		return true, w.markDirectory(dir)
 	}
-	return nil
+	return true, nil
 }
 
 // RemoveRoot removes a watch directory at runtime.
