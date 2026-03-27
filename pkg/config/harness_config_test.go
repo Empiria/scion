@@ -308,12 +308,11 @@ func TestSeedHarnessConfig_MockHarness(t *testing.T) {
 func TestSeedHarnessConfigFromFS(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Use the config package's own EmbedsFS to test SeedHarnessConfigFromFS
-	// with the common embed FS. Since we only have common files left in config embeds,
-	// we test the mechanism with what's available.
+	// Use the default template's home directory as a source FS to test
+	// SeedHarnessConfigFromFS mechanics (directory creation, file copying).
 	targetDir := filepath.Join(tmpDir, "test-config")
 
-	err := SeedHarnessConfigFromFS(targetDir, EmbedsFS, "embeds/common", ".test-config", false)
+	err := SeedHarnessConfigFromFS(targetDir, EmbedsFS, "embeds/templates/default/home", ".test-config", false)
 	if err != nil {
 		t.Fatalf("SeedHarnessConfigFromFS failed: %v", err)
 	}

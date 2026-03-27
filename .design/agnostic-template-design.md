@@ -22,14 +22,15 @@ The decided approach is **Harness-Config Base Layers with Optional Template Over
 
 Today, templates and harnesses are tightly coupled at every level:
 
-**Source embeds** (`pkg/config/embeds/`): Each harness has its own embed directory containing a complete agent home layout. There is no shared "template" concept that spans harnesses. Some common files exist (`.tmux.conf`, `.bashrc`, `.zshrc`) but they are incomplete — `.zshrc` needs to be added to the common set.
+**Source embeds** (`pkg/config/embeds/`): Each harness has its own embed directory containing a complete agent home layout. Common files (`.tmux.conf`, `.zshrc`, `.gitconfig`, `.geminiignore`) are embedded in the default agnostic template at `embeds/templates/default/home/` and seeded via `SeedAgnosticTemplate()`.
 
 ```
 pkg/config/embeds/
-├── common/                    # Shared shell/terminal config
+├── templates/default/home/    # Common shell/terminal config (seeded as default template)
 │   ├── .tmux.conf
-│   ├── bashrc                 # Common shell setup
-│   └── zshrc                  # Common zsh setup (needs adding)
+│   ├── .zshrc
+│   ├── .gitconfig
+│   └── .gemini/.geminiignore
 ├── claude/                    # Claude-coupled template
 │   ├── scion-agent.yaml       # declares harness: claude
 │   ├── .claude.json           # Claude Code state file
@@ -51,7 +52,7 @@ pkg/config/embeds/
     └── opencode.json          # OpenCode config (theme)
 ```
 
-**Template seeding** (`Harness.SeedTemplateDir()`): Each harness implementation controls its own template directory layout. The `SeedCommonFiles()` function in `pkg/config/init.go` provides minimal shared infrastructure but the harness drives the process.
+**Template seeding** (`Harness.SeedTemplateDir()`): Each harness implementation controls its own template directory layout. The `SeedAgnosticTemplate()` function in `pkg/config/init.go` seeds the default template (including common home files) in a single `fs.WalkDir()` pass.
 
 **Template discovery** (`pkg/config/templates.go`): Templates are discovered by name (e.g., `gemini`, `claude`) and their `scion-agent.yaml` declares which harness they bind to. The template name conventionally matches the harness name.
 
@@ -312,7 +313,7 @@ Steps:
 3. Copy template home → agent home (overlay, template files win on conflict)
 4. Inject agent instructions into harness-specific location (or configure harness to read `agents.md`)
 5. Inject system prompt — write to harness-native location, or downgrade into agent instructions if harness lacks system prompt support
-6. Copy common files (`.tmux.conf`, `.bashrc`, `.zshrc`)
+6. Common files (`.tmux.conf`, `.zshrc`, `.gitconfig`) are already included via the default template base layer
 7. Call `Harness.Provision()` for dynamic setup (e.g., workspace paths in `.claude.json`)
 
 ### 3.6 Agent Instruction & System Prompt Injection
@@ -515,7 +516,7 @@ The current `pkg/config/embeds/` directory is organized by harness. In a harness
 
 - **Harness-config base files**: Moved to `pkg/harness/` package — each harness owns its embedded default home files and config
 - **Default templates**: Harness-agnostic templates that ship with the binary, remain in `pkg/config/embeds/`
-- **Common files**: Shared across all (`.tmux.conf`, `.bashrc`, `.zshrc`), remain in `pkg/config/embeds/common/`
+- **Common files**: Shared across all (`.tmux.conf`, `.zshrc`, `.gitconfig`, `.geminiignore`), embedded in `embeds/templates/default/home/` and seeded as part of the default template via `SeedAgnosticTemplate()`
 
 ### 4.7 Harness.Provision() Must Handle Missing Files
 
@@ -637,7 +638,7 @@ This work is divided into four progressive phases. Each phase produces a working
 
 **Scope:**
 - Implement harness-config resolution chain: CLI `--harness-config` flag → template's `default_harness_config` → settings `default_harness_config` → error
-- Build the composition flow in `ProvisionAgent()`: copy harness-config base home, apply template harness-config scalar overrides (if present), overlay template home, inject agent instructions and system prompt, copy common files, call `Harness.Provision()`
+- Build the composition flow in `ProvisionAgent()`: copy harness-config base home, apply template harness-config scalar overrides (if present), overlay template home (common files are included via the default template base layer), inject agent instructions and system prompt, call `Harness.Provision()`
 - Add `--harness-config` flag to `scion create`
 - Update `Harness.Provision()` to handle cases where base files may already exist from the harness-config layer (rather than assuming the template placed them)
 

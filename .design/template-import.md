@@ -343,7 +343,7 @@ func WriteTemplate(agent *ImportedAgent, grovePath string, force bool) (string, 
 
 The writer:
 1. Creates the template directory structure
-2. Seeds common files from embedded defaults (reuses `SeedCommonFiles`)
+2. Seeds common files from embedded defaults (via the default template base layer)
 3. Writes the system prompt to the appropriate harness instruction file
 4. Generates harness-specific settings from the parsed metadata
 5. Writes `scion-agent.yaml` with harness config and model

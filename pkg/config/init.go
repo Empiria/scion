@@ -77,120 +77,6 @@ func GetDefaultSettingsData() ([]byte, error) {
 	return getDefaultSettingsDataForRuntime(targetRuntime)
 }
 
-// SeedCommonFiles seeds the common files for a harness template.
-// It creates the base directory structure and writes only common files
-// (.tmux.conf, .zshrc) that are shared across all harnesses.
-func SeedCommonFiles(templateDir, configDirName string, force bool) error {
-	homeDir := filepath.Join(templateDir, "home")
-	// Create directories
-	dirs := []string{
-		templateDir,
-		homeDir,
-		filepath.Join(homeDir, ".config", "gcloud"),
-	}
-	if configDirName != "" {
-		dirs = append(dirs, filepath.Join(homeDir, configDirName))
-	}
-
-	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
-
-	// Helper to read common embedded file
-	readCommonEmbed := func(name string) string {
-		data, err := EmbedsFS.ReadFile(filepath.Join("embeds", "common", name))
-		if err != nil {
-			return ""
-		}
-		return string(data)
-	}
-
-	// Seed common template files
-	files := []struct {
-		path    string
-		content string
-		mode    os.FileMode
-	}{
-		{filepath.Join(homeDir, ".tmux.conf"), readCommonEmbed(".tmux.conf"), 0644},
-		{filepath.Join(homeDir, ".zshrc"), readCommonEmbed("zshrc"), 0644},
-		{filepath.Join(homeDir, ".gitconfig"), readCommonEmbed(".gitconfig"), 0644},
-		{filepath.Join(homeDir, ".gemini", ".geminiignore"), readCommonEmbed(".geminiignore"), 0644},
-	}
-
-	for _, f := range files {
-		if f.content == "" {
-			continue
-		}
-		// Ensure parent directory exists (e.g., for .gemini/.geminiignore)
-		if err := os.MkdirAll(filepath.Dir(f.path), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", f.path, err)
-		}
-		if force {
-			if err := os.WriteFile(f.path, []byte(f.content), f.mode); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", f.path, err)
-			}
-			continue
-		}
-
-		if _, err := os.Stat(f.path); os.IsNotExist(err) {
-			if err := os.WriteFile(f.path, []byte(f.content), f.mode); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", f.path, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-// SeedCommonFilesToHome seeds common files (.tmux.conf, .zshrc) directly into
-// a home directory. Unlike SeedCommonFiles which writes into templateDir/home/,
-// this writes directly into the provided homeDir for use during agent provisioning.
-func SeedCommonFilesToHome(homeDir string, force bool) error {
-	readCommonEmbed := func(name string) string {
-		data, err := EmbedsFS.ReadFile(filepath.Join("embeds", "common", name))
-		if err != nil {
-			return ""
-		}
-		return string(data)
-	}
-
-	files := []struct {
-		path    string
-		content string
-		mode    os.FileMode
-	}{
-		{filepath.Join(homeDir, ".tmux.conf"), readCommonEmbed(".tmux.conf"), 0644},
-		{filepath.Join(homeDir, ".zshrc"), readCommonEmbed("zshrc"), 0644},
-		{filepath.Join(homeDir, ".gitconfig"), readCommonEmbed(".gitconfig"), 0644},
-		{filepath.Join(homeDir, ".gemini", ".geminiignore"), readCommonEmbed(".geminiignore"), 0644},
-	}
-
-	for _, f := range files {
-		if f.content == "" {
-			continue
-		}
-		// Ensure parent directory exists (e.g., for .gemini/.geminiignore)
-		if err := os.MkdirAll(filepath.Dir(f.path), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for %s: %w", f.path, err)
-		}
-		if force {
-			if err := os.WriteFile(f.path, []byte(f.content), f.mode); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", f.path, err)
-			}
-			continue
-		}
-		if _, err := os.Stat(f.path); os.IsNotExist(err) {
-			if err := os.WriteFile(f.path, []byte(f.content), f.mode); err != nil {
-				return fmt.Errorf("failed to write file %s: %w", f.path, err)
-			}
-		}
-	}
-
-	return nil
-}
-
 // SeedFileFromFS writes a file from an embed.FS to a target path.
 // If force is true, the file is always overwritten. Otherwise, it is only
 // written if it does not already exist. alwaysOverwrite can be set to true
@@ -285,7 +171,7 @@ func GetEnclosingGrovePath() (grovePath string, rootDir string, found bool) {
 // It recursively copies all files and directories into the target directory.
 // Common home files (.tmux.conf, .zshrc, .gitconfig, .geminiignore) are
 // embedded directly under embeds/templates/default/home/ and copied as part
-// of the normal walk — no separate SeedCommonFiles step is needed.
+// of the normal walk.
 func SeedAgnosticTemplate(targetDir string, force bool) error {
 	templateBase := "embeds/templates/default"
 
