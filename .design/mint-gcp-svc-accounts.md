@@ -239,14 +239,14 @@ Wrap `gcloud iam service-accounts create` behind a `scion` CLI command that also
 
 ## Implementation Plan
 
-### Phase 1: Core Minting
-- [ ] Add `GCPProjectID` to `ServerConfig` with metadata-server auto-detection
-- [ ] Implement `GCPServiceAccountAdmin` interface and IAM Admin API client
-- [ ] Add `managed`/`managed_by` columns (new migration)
-- [ ] Implement `POST .../mint` endpoint with authz, audit logging, slug validation
-- [ ] Add `scion grove service-accounts mint` CLI command (`--account-id`, `--name`)
-- [ ] Add grove-delete warning for retained managed SAs
-- [ ] Unit tests for admin client, handler, and store changes
+### Phase 1: Core Minting ✅
+- [x] Add `GCPProjectID` to `ServerConfig` with metadata-server auto-detection
+- [x] Implement `GCPServiceAccountAdmin` interface and IAM Admin API client
+- [x] Add `managed`/`managed_by` columns (new migration)
+- [x] Implement `POST .../mint` endpoint with authz, audit logging, slug validation
+- [x] Add `scion grove service-accounts mint` CLI command (`--account-id`, `--name`)
+- [x] Add grove-delete warning for retained managed SAs
+- [x] Unit tests for admin client, handler, and store changes
 - [ ] Integration test with IAM API (requires test project)
 
 ### Phase 2: Limits & UI
