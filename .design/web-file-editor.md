@@ -363,16 +363,16 @@ Renders markdown as sanitized HTML.
 
 ## 9. Implementation Phases
 
-### Phase 1: Shared File Browser Extraction
+### Phase 1: Shared File Browser Extraction ✅
 
-- [ ] Extract file table rendering from `grove-detail.ts` into `scion-file-browser` component
-- [ ] Define `FileBrowserDataSource` adapter interface
-- [ ] Implement `WorkspaceFileBrowserDataSource`
-- [ ] Implement `SharedDirFileBrowserDataSource`
-- [ ] Refactor `grove-detail.ts` workspace view to use `scion-file-browser`
-- [ ] Refactor shared-dir browser to use `scion-file-browser`
-- [ ] Add "New File" button to file browser toolbar
-- [ ] Verify no regressions in existing file browser functionality
+- [x] Extract file table rendering from `grove-detail.ts` into `scion-file-browser` component
+- [x] Define `FileBrowserDataSource` adapter interface
+- [x] Implement `WorkspaceFileBrowserDataSource`
+- [x] Implement `SharedDirFileBrowserDataSource`
+- [x] Refactor `grove-detail.ts` workspace view to use `scion-file-browser`
+- [x] Refactor shared-dir browser to use `scion-file-browser`
+- [x] Add "New File" button to file browser toolbar
+- [x] Verify no regressions in existing file browser functionality
 
 ### Phase 2: Core Editor
 
