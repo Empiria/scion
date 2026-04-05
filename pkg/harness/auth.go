@@ -214,9 +214,10 @@ func RequiredAuthSecrets(harnessName, authSelectedType string, gcpSAAssigned boo
 		if effectiveType == "vertex-ai" && !gcpSAAssigned {
 			return []api.RequiredSecret{
 				{
-					Key:         "gcloud-adc",
-					Type:        "file",
-					Description: "Google Cloud Application Default Credentials (ADC) file for vertex-ai authentication",
+					Key:                "gcloud-adc",
+					Type:               "file",
+					Description:        "Google Cloud Application Default Credentials (ADC) file for vertex-ai authentication",
+					AlternativeEnvKeys: []string{"GOOGLE_APPLICATION_CREDENTIALS"},
 				},
 			}
 		}

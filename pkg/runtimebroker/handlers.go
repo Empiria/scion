@@ -1615,11 +1615,21 @@ func (s *Server) extractRequiredEnvKeys(req CreateAgentRequest) ([]string, map[s
 
 			for _, as := range authSecrets {
 				if _, ok := fileSecrets[as.Key]; !ok {
-					required[as.Key] = struct{}{}
-					secretInfo[as.Key] = api.SecretKeyInfo{
-						Description: as.Description,
-						Source:      "auth",
-						Type:        "file",
+					// Check if any alternative env keys satisfy this requirement.
+					altSatisfied := false
+					for _, altKey := range as.AlternativeEnvKeys {
+						if v, ok := req.ResolvedEnv[altKey]; ok && v != "" {
+							altSatisfied = true
+							break
+						}
+					}
+					if !altSatisfied {
+						required[as.Key] = struct{}{}
+						secretInfo[as.Key] = api.SecretKeyInfo{
+							Description: as.Description,
+							Source:      "auth",
+							Type:        "file",
+						}
 					}
 				}
 			}

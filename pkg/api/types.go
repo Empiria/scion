@@ -473,6 +473,11 @@ type RequiredSecret struct {
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	Type        string `json:"type,omitempty" yaml:"type,omitempty"`     // "environment" (default), "variable", "file"
 	Target      string `json:"target,omitempty" yaml:"target,omitempty"` // Projection target (defaults to Key for env type)
+	// AlternativeEnvKeys lists env var names that can satisfy this secret
+	// requirement as an alternative. If any of these env vars are present,
+	// the file secret is not required. For example, GOOGLE_APPLICATION_CREDENTIALS
+	// can substitute for a gcloud-adc file secret.
+	AlternativeEnvKeys []string `json:"alternative_env_keys,omitempty" yaml:"alternative_env_keys,omitempty"`
 }
 
 // SecretKeyInfo provides metadata about a required secret key, including

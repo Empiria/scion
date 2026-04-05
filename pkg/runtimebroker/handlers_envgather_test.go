@@ -1634,6 +1634,54 @@ profiles:
 	}
 }
 
+// TestEnvGather_VertexAI_ADCSatisfiedByEnvVar tests that vertex-ai auth is
+// satisfied when GOOGLE_APPLICATION_CREDENTIALS env var is provided instead
+// of a gcloud-adc file secret.
+func TestEnvGather_VertexAI_ADCSatisfiedByEnvVar(t *testing.T) {
+	srv, _, groveDir := newTestServerWithHarnessConfig(t, "claude",
+		"harness: claude\nimage: test-image\nuser: scion\nauth_selected_type: vertex-ai\n",
+		`
+schema_version: "1"
+harness_configs:
+  claude:
+    harness: claude
+profiles:
+  default:
+    runtime: mock
+`)
+
+	// Provide project, region, AND GOOGLE_APPLICATION_CREDENTIALS env var
+	// (no gcloud-adc file secret)
+	body := `{
+		"name": "test-agent-vertex-gac",
+		"id": "agent-uuid-vgac",
+		"gatherEnv": true,
+		"grovePath": "` + groveDir + `",
+		"resolvedEnv": {
+			"GOOGLE_CLOUD_PROJECT": "my-project",
+			"GOOGLE_CLOUD_REGION": "us-central1",
+			"GOOGLE_APPLICATION_CREDENTIALS": "/path/to/service-account.json"
+		},
+		"config": {"template": "claude", "profile": "default"}
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/agents", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	srv.Handler().ServeHTTP(w, req)
+
+	// Should NOT return 202 — GOOGLE_APPLICATION_CREDENTIALS satisfies the ADC requirement
+	if w.Code == http.StatusAccepted {
+		var envReqs EnvRequirementsResponse
+		json.Unmarshal(w.Body.Bytes(), &envReqs)
+		for _, k := range envReqs.Needs {
+			if k == "gcloud-adc" {
+				t.Fatalf("gcloud-adc should not be in needs when GOOGLE_APPLICATION_CREDENTIALS is provided, got needs=%v", envReqs.Needs)
+			}
+		}
+	}
+}
+
 // TestEnvGather_HarnessAuthOverride tests that the --harness-auth CLI flag
 // (passed as config.harnessAuth) overrides auth type detection in env-gather.
 // This is a regression test: previously, --harness-auth api-key would fail

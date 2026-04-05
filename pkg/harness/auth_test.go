@@ -479,6 +479,12 @@ func TestRequiredAuthSecrets(t *testing.T) {
 			if got[0].Description == "" {
 				t.Error("Description should not be empty")
 			}
+			// vertex-ai secrets should list GOOGLE_APPLICATION_CREDENTIALS as alternative
+			if tt.authType == "vertex-ai" && !tt.gcpSAAssigned {
+				if len(got[0].AlternativeEnvKeys) != 1 || got[0].AlternativeEnvKeys[0] != "GOOGLE_APPLICATION_CREDENTIALS" {
+					t.Errorf("AlternativeEnvKeys = %v, want [GOOGLE_APPLICATION_CREDENTIALS]", got[0].AlternativeEnvKeys)
+				}
+			}
 		})
 	}
 }
