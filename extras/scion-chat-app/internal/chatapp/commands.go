@@ -100,7 +100,7 @@ func (r *CommandRouter) SetMessenger(m Messenger) {
 func (r *CommandRouter) HandleEvent(ctx context.Context, event *ChatEvent) (*EventResponse, error) {
 	switch event.Type {
 	case EventCommand:
-		return nil, r.handleCommand(ctx, event)
+		return r.handleCommand(ctx, event)
 	case EventMessage:
 		return nil, r.handleMessage(ctx, event)
 	case EventAction:
@@ -118,11 +118,12 @@ func (r *CommandRouter) HandleEvent(ctx context.Context, event *ChatEvent) (*Eve
 }
 
 // handleCommand parses "/scion <subcommand> <args>" and routes.
-func (r *CommandRouter) handleCommand(ctx context.Context, event *ChatEvent) error {
+// Returns an optional EventResponse for commands that respond synchronously.
+func (r *CommandRouter) handleCommand(ctx context.Context, event *ChatEvent) (*EventResponse, error) {
 	parts := strings.Fields(event.Args)
 	if len(parts) == 0 {
 		r.log.Info("command received (no subcommand, showing help)", "space", event.SpaceID, "user", event.UserID)
-		return r.cmdHelp(ctx, event)
+		return nil, r.cmdHelp(ctx, event)
 	}
 
 	subcommand := strings.ToLower(parts[0])
@@ -130,6 +131,20 @@ func (r *CommandRouter) handleCommand(ctx context.Context, event *ChatEvent) err
 
 	r.log.Info("command received", "subcommand", subcommand, "args", strings.Join(args, " "), "space", event.SpaceID, "user", event.UserID)
 
+	// Commands that return synchronous responses (e.g. info returns a card
+	// directly in the HTTP body so the Chat UI doesn't show an error toast).
+	switch subcommand {
+	case "info":
+		resp, err := r.cmdInfo(ctx, event, args)
+		if err != nil {
+			r.log.Error("command failed", "subcommand", subcommand, "error", err)
+		} else {
+			r.log.Info("command completed", "subcommand", subcommand)
+		}
+		return resp, err
+	}
+
+	// Commands that respond asynchronously via the REST API.
 	var err error
 	switch subcommand {
 	case "list":
@@ -160,8 +175,6 @@ func (r *CommandRouter) handleCommand(ctx context.Context, event *ChatEvent) err
 		err = r.cmdUnsubscribe(ctx, event, args)
 	case "message", "msg":
 		err = r.cmdMessage(ctx, event, args)
-	case "info":
-		err = r.cmdInfo(ctx, event, args)
 	case "help":
 		err = r.cmdHelp(ctx, event)
 	default:
@@ -174,7 +187,7 @@ func (r *CommandRouter) handleCommand(ctx context.Context, event *ChatEvent) err
 	} else {
 		r.log.Info("command completed", "subcommand", subcommand)
 	}
-	return err
+	return nil, err
 }
 
 // handleMessage routes @mention messages to an agent.
@@ -930,13 +943,13 @@ func (r *CommandRouter) cmdMessage(ctx context.Context, event *ChatEvent, args [
 	return r.reply(ctx, event, reply)
 }
 
-func (r *CommandRouter) cmdInfo(ctx context.Context, event *ChatEvent, args []string) error {
+func (r *CommandRouter) cmdInfo(ctx context.Context, event *ChatEvent, args []string) (*EventResponse, error) {
 	// User registration state
 	registrationStatus := "Not registered"
 	registeredEmail := ""
 	mapping, err := r.idMapper.Resolve(event.UserID, event.Platform)
 	if err != nil {
-		return fmt.Errorf("checking registration: %w", err)
+		return nil, fmt.Errorf("checking registration: %w", err)
 	}
 	if mapping != nil {
 		registrationStatus = "Registered"
@@ -949,7 +962,7 @@ func (r *CommandRouter) cmdInfo(ctx context.Context, event *ChatEvent, args []st
 	var link *state.SpaceLink
 	link, err = r.store.GetSpaceLink(event.SpaceID, event.Platform)
 	if err != nil {
-		return fmt.Errorf("checking space link: %w", err)
+		return nil, fmt.Errorf("checking space link: %w", err)
 	}
 	if link != nil {
 		linkStatus = "Linked"
@@ -992,8 +1005,11 @@ func (r *CommandRouter) cmdInfo(ctx context.Context, event *ChatEvent, args []st
 		},
 	}
 
-	_, err = r.messenger.SendCard(ctx, event.SpaceID, card)
-	return err
+	return &EventResponse{
+		Message: &SendMessageRequest{
+			Card: &card,
+		},
+	}, nil
 }
 
 func (r *CommandRouter) cmdHelp(ctx context.Context, event *ChatEvent) error {
