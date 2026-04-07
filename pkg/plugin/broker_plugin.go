@@ -17,6 +17,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/rpc"
 
 	"github.com/GoogleCloudPlatform/scion/pkg/broker"
@@ -180,6 +181,7 @@ func (p *BrokerPlugin) Client(broker *goplugin.MuxBroker, c *rpc.Client) (interf
 	if p.HostCallbacks != nil {
 		// Start serving host callbacks on the MuxBroker reverse channel.
 		// The plugin will Dial this channel during Configure.
+		slog.Debug("starting host callbacks AcceptAndServe", "mux_id", hostCallbacksMuxID)
 		go broker.AcceptAndServe(hostCallbacksMuxID, &HostCallbacksRPCServer{Impl: p.HostCallbacks})
 	}
 	return &BrokerRPCClient{client: c, hostCallbacksAvailable: p.HostCallbacks != nil}, nil
@@ -199,12 +201,17 @@ func (s *BrokerRPCServer) Configure(args *ConfigureArgs, _ *struct{}) error {
 	// reverse RPC channel and inject it into the plugin implementation.
 	if args.Config != nil && args.Config[hostCallbacksConfigKey] == "true" && s.muxBroker != nil {
 		conn, err := s.muxBroker.Dial(hostCallbacksMuxID)
-		if err == nil {
+		if err != nil {
+			slog.Warn("failed to dial host callbacks reverse channel",
+				"error", err, "mux_id", hostCallbacksMuxID)
+		} else {
 			callbacks := &HostCallbacksRPCClient{client: rpc.NewClient(conn)}
 			if aware, ok := s.Impl.(HostCallbacksAware); ok {
 				aware.SetHostCallbacks(callbacks)
 			}
 		}
+	} else if args.Config != nil && args.Config[hostCallbacksConfigKey] == "true" && s.muxBroker == nil {
+		slog.Warn("host callbacks requested but muxBroker is nil on plugin side")
 	}
 	return s.Impl.Configure(args.Config)
 }
