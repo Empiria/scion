@@ -726,12 +726,26 @@ func New(cfg ServerConfig, s store.Store) (*Server, error) {
 // keys, unlike user-managed secrets which always require a production backend.
 func (s *Server) ensureSigningKey(ctx context.Context, keyName string, existingKey []byte) ([]byte, error) {
 	if len(existingKey) > 0 {
+		fp := sha256.Sum256(existingKey)
+		slog.Info("ensureSigningKey: using pre-configured key",
+			"key", keyName,
+			"source", "config",
+			"key_len", len(existingKey),
+			"sha256_prefix", hex.EncodeToString(fp[:8]),
+		)
 		return existingKey, nil
 	}
 
 	hubID := s.hubID
 	hasSecretBackend := s.secretBackend != nil
 	_, isGCPBackend := s.secretBackend.(*secret.GCPBackend)
+
+	slog.Info("ensureSigningKey: resolving key",
+		"key", keyName,
+		"hub_id", hubID,
+		"has_secret_backend", hasSecretBackend,
+		"is_gcp_backend", isGCPBackend,
+	)
 
 	// Try to load from the secret backend if configured
 	if hasSecretBackend {
@@ -742,6 +756,16 @@ func (s *Server) ensureSigningKey(ctx context.Context, keyName string, existingK
 			if decErr != nil {
 				return nil, fmt.Errorf("failed to decode signing key %s from secret backend: %w", keyName, decErr)
 			}
+			fp := sha256.Sum256(key)
+			slog.Info("ensureSigningKey: resolved from secret backend",
+				"key", keyName,
+				"source", "secret_backend",
+				"scope", store.ScopeHub,
+				"scope_id", hubID,
+				"key_len", len(key),
+				"sha256_prefix", hex.EncodeToString(fp[:8]),
+				"secret_ref", sv.SecretRef,
+			)
 			// Backfill the SQLite record as a local backup so the key survives
 			// even if the secret backend becomes unavailable. This also covers
 			// the case where GCPBackend.Get recovered the key directly from
@@ -774,6 +798,15 @@ func (s *Server) ensureSigningKey(ctx context.Context, keyName string, existingK
 			if len(key) == 0 {
 				return nil, fmt.Errorf("signing key %s decoded to empty value", keyName)
 			}
+			fp := sha256.Sum256(key)
+			slog.Info("ensureSigningKey: resolved from store",
+				"key", keyName,
+				"source", "store",
+				"scope", store.ScopeHub,
+				"scope_id", hubID,
+				"key_len", len(key),
+				"sha256_prefix", hex.EncodeToString(fp[:8]),
+			)
 			// Sync to secret backend so future restarts load from the authoritative source.
 			if err := s.syncSigningKeyToBackend(ctx, keyName, val, hubID, isGCPBackend); err != nil {
 				return nil, err
@@ -801,6 +834,15 @@ func (s *Server) ensureSigningKey(ctx context.Context, keyName string, existingK
 			if decErr != nil {
 				return nil, fmt.Errorf("failed to decode legacy signing key %s: %w", keyName, decErr)
 			}
+			fp := sha256.Sum256(key)
+			slog.Info("ensureSigningKey: resolved from legacy migration",
+				"key", keyName,
+				"source", "legacy_store",
+				"legacy_scope_id", legacyScopeID,
+				"target_scope_id", hubID,
+				"key_len", len(key),
+				"sha256_prefix", hex.EncodeToString(fp[:8]),
+			)
 			// Delete the old secret from the secret backend (e.g. GCP SM) first
 			// so stale secrets don't confuse label-based auto-discovery by
 			// external consumers like scion-chat-app.
@@ -831,13 +873,21 @@ func (s *Server) ensureSigningKey(ctx context.Context, keyName string, existingK
 	}
 
 	// Not found anywhere, generate a new one
-	slog.Warn("Signing key not found in any source, generating new key", "key", keyName)
+	slog.Warn("Signing key not found in any source, generating new key", "key", keyName, "hub_id", hubID)
 	newKey := make([]byte, 32)
 	if _, err := rand.Read(newKey); err != nil {
 		return nil, fmt.Errorf("failed to generate random signing key: %w", err)
 	}
 
 	encodedKey := base64.StdEncoding.EncodeToString(newKey)
+	fp := sha256.Sum256(newKey)
+	slog.Info("ensureSigningKey: generated new key",
+		"key", keyName,
+		"source", "generated",
+		"scope_id", hubID,
+		"key_len", len(newKey),
+		"sha256_prefix", hex.EncodeToString(fp[:8]),
+	)
 
 	// Save through the secret backend first
 	if hasSecretBackend {
