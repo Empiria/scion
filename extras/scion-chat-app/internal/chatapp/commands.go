@@ -906,9 +906,13 @@ func (r *CommandRouter) cmdMessage(ctx context.Context, event *ChatEvent, args [
 		return err
 	}
 
-	client, err := r.clientForUser(ctx, event)
-	if err != nil {
+	mapping, err := r.idMapper.ResolveOrAutoRegister(ctx, &eventUserLookup{event}, event.UserID, event.Platform)
+	if err != nil || mapping == nil {
 		return r.reply(ctx, event, "Authentication required. Use `/scion register` first.")
+	}
+	client, err := r.idMapper.ClientFor(ctx, mapping)
+	if err != nil {
+		return r.reply(ctx, event, fmt.Sprintf("Failed to create client: %v", err))
 	}
 
 	// Parse --thread flag
@@ -929,8 +933,8 @@ func (r *CommandRouter) cmdMessage(ctx context.Context, event *ChatEvent, args [
 	agentSlug := remaining[0]
 	messageText := strings.Join(remaining[1:], " ")
 
-	// Use structured message to include thread context
-	msg := messages.NewInstruction(event.UserID, agentSlug, messageText)
+	// Use the hub user email as sender so agents can address replies
+	msg := messages.NewInstruction(mapping.HubUserEmail, agentSlug, messageText)
 	if threadID != "" {
 		// Include thread ID as part of the message metadata
 		msg.Msg = fmt.Sprintf("[thread:%s] %s", threadID, msg.Msg)
