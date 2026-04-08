@@ -862,7 +862,7 @@ func TestRuntimeBroker_DefaultAuth_DeniesUnauthenticatedRequests(t *testing.T) {
 	}
 }
 
-func TestValidateBrokerAuthStartup_HubModeWithoutKeysFails(t *testing.T) {
+func TestValidateBrokerAuthStartup_HubModeWithoutKeysAllowsBootstrap(t *testing.T) {
 	cfg := DefaultServerConfig()
 	cfg.Host = "127.0.0.1"
 	cfg.HubEnabled = true
@@ -870,8 +870,8 @@ func TestValidateBrokerAuthStartup_HubModeWithoutKeysFails(t *testing.T) {
 	cfg.InMemoryCredentials = nil
 
 	srv := New(cfg, &mockManager{}, &runtime.MockRuntime{})
-	if err := srv.validateBrokerAuthStartup(); err == nil {
-		t.Fatal("expected startup validation to fail when hub mode has no HMAC keys")
+	if err := srv.validateBrokerAuthStartup(); err != nil {
+		t.Fatalf("expected startup validation to succeed for registration bootstrap, got: %v", err)
 	}
 }
 
