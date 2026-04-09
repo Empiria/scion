@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -113,6 +114,19 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 		env = setEnvVar(env, "LOGNAME", s.config.Username)
 		s.cmd.Env = env
 		log.Debug("Child env: HOME=%s, USER=%s, LOGNAME=%s", home, s.config.Username, s.config.Username)
+	}
+
+	// Fix ownership of the home directory when dropping privileges.
+	// Pre-start hooks run as root and may create files (e.g. .claude/, agent-info.json)
+	// that the child process needs to write to. Without this, the child (running as
+	// UID/GID from the credential drop) gets permission denied on its own home.
+	if s.config.UID > 0 && s.config.GID > 0 && s.config.Username != "" {
+		home := "/home/" + s.config.Username
+		if err := chownRecursive(home, s.config.UID, s.config.GID); err != nil {
+			log.Error("Failed to chown home directory %s: %v", home, err)
+		} else {
+			log.Debug("Chowned %s to %d:%d", home, s.config.UID, s.config.GID)
+		}
 	}
 
 	// Apply SCION_EXTRA_PATH: prepend its value to PATH, then remove it from env.
@@ -297,4 +311,14 @@ func removeEnvVar(env []string, key string) []string {
 		result = append(result, e)
 	}
 	return result
+}
+
+// chownRecursive changes ownership of a directory and all its contents.
+func chownRecursive(root string, uid, gid int) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Lchown(path, uid, gid)
+	})
 }
