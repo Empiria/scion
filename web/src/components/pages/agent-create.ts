@@ -83,6 +83,9 @@ export class ScionPageAgentCreate extends LitElement {
   private harness = 'gemini';
 
   @state()
+  private customHarness = '';
+
+  @state()
   private harnessAuth = '';
 
   @state()
@@ -467,7 +470,7 @@ export class ScionPageAgentCreate extends LitElement {
       const body: Record<string, unknown> = {
         name: this.slugify(this.name),
         groveId: this.groveId,
-        harnessConfig: this.harness,
+        harnessConfig: this.resolvedHarness,
         notify: this.notify,
       };
 
@@ -594,7 +597,7 @@ export class ScionPageAgentCreate extends LitElement {
       const body: Record<string, unknown> = {
         name: this.slugify(this.name),
         groveId: this.groveId,
-        harnessConfig: this.harness,
+        harnessConfig: this.resolvedHarness,
         notify: this.notify,
         provisionOnly: true,
       };
@@ -733,7 +736,7 @@ export class ScionPageAgentCreate extends LitElement {
       );
       if (match) {
         this.templateId = match.id;
-        this.harness = match.harness || harnessDefault;
+        this.setHarnessFromValue(match.harness || harnessDefault);
         return;
       }
     }
@@ -742,13 +745,13 @@ export class ScionPageAgentCreate extends LitElement {
     const fallback = visible.find((t) => t.slug === 'default' || t.name === 'default');
     if (fallback) {
       this.templateId = fallback.id;
-      this.harness = fallback.harness || harnessDefault;
+      this.setHarnessFromValue(fallback.harness || harnessDefault);
     } else if (visible.length > 0) {
       this.templateId = visible[0].id;
-      this.harness = visible[0].harness || harnessDefault;
+      this.setHarnessFromValue(visible[0].harness || harnessDefault);
     } else {
       this.templateId = '';
-      this.harness = harnessDefault;
+      this.setHarnessFromValue(harnessDefault);
     }
   }
 
@@ -788,7 +791,7 @@ export class ScionPageAgentCreate extends LitElement {
 
       this.name = agent.name || '';
       this.groveId = agent.groveId || '';
-      if (agent.harnessConfig) this.harness = agent.harnessConfig;
+      if (agent.harnessConfig) this.setHarnessFromValue(agent.harnessConfig);
       if (agent.harnessAuth) this.harnessAuth = agent.harnessAuth;
       if (agent.template) this.templateId = agent.template;
       if (agent.runtimeBrokerId) this.brokerId = agent.runtimeBrokerId;
@@ -927,8 +930,42 @@ export class ScionPageAgentCreate extends LitElement {
     // Update harness to match template's harness
     const template = this.templates.find((t) => t.id === this.templateId);
     if (template?.harness) {
-      this.harness = template.harness;
+      this.setHarnessFromValue(template.harness);
     }
+  }
+
+  /**
+   * Set harness from a value, falling back to "Other" if the value doesn't
+   * match any known harness config in the dropdown.
+   */
+  private setHarnessFromValue(value: string): void {
+    const knownNames = this.harnessConfigs.map((hc) => hc.name);
+    const fallbackNames = ['gemini', 'claude', 'opencode', 'codex'];
+    const available = knownNames.length > 0 ? knownNames : fallbackNames;
+
+    if (available.includes(value)) {
+      this.harness = value;
+      this.customHarness = '';
+    } else {
+      this.harness = '__other__';
+      this.customHarness = value;
+    }
+  }
+
+  /** Resolved harness config name for submission. */
+  private get resolvedHarness(): string {
+    return this.harness === '__other__' ? this.customHarness : this.harness;
+  }
+
+  /** Hint text showing when the selected harness matches the template's harness. */
+  private get templateHarnessHint(): string {
+    const template = this.templates.find((t) => t.id === this.templateId);
+    if (!template?.harness) return '';
+
+    if (template.harness === this.resolvedHarness) {
+      return 'Matches selected template.';
+    }
+    return `Template suggests: ${template.harness}`;
   }
 
   override render() {
@@ -1059,6 +1096,9 @@ export class ScionPageAgentCreate extends LitElement {
               .value=${this.harness}
               @sl-change=${(e: Event) => {
                 this.harness = (e.target as HTMLElement & { value: string }).value;
+                if (this.harness !== '__other__') {
+                  this.customHarness = '';
+                }
               }}
             >
               ${this.harnessConfigs.length > 0
@@ -1076,9 +1116,33 @@ export class ScionPageAgentCreate extends LitElement {
                     <sl-option value="opencode">OpenCode</sl-option>
                     <sl-option value="codex">Codex</sl-option>
                   `}
+              <sl-option value="__other__">Other...</sl-option>
             </sl-select>
-            <div class="hint">The LLM harness configuration to use.</div>
+            <div class="hint">
+              ${this.templateHarnessHint
+                ? this.templateHarnessHint
+                : 'The LLM harness configuration to use.'}
+            </div>
           </div>
+          ${this.harness === '__other__'
+            ? html`
+                <div class="form-field">
+                  <label for="custom-harness">Custom Harness Config Name</label>
+                  <sl-input
+                    id="custom-harness"
+                    placeholder="e.g. my-custom-harness"
+                    .value=${this.customHarness}
+                    @sl-input=${(e: Event) => {
+                      this.customHarness = (e.target as HTMLElement & { value: string }).value;
+                    }}
+                    required
+                  ></sl-input>
+                  <div class="hint">
+                    Name of the harness config directory (from .scion/harness-configs/).
+                  </div>
+                </div>
+              `
+            : ''}
 
           <div class="form-field">
             <label for="harness-auth">Harness Authentication</label>

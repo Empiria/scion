@@ -818,6 +818,12 @@ func initHubServer(ctx context.Context, cfg *config.GlobalConfig, s store.Store,
 		log.Printf("Warning: template bootstrap failed: %v", err)
 	}
 
+	// Bootstrap local harness configs into Hub
+	globalHarnessConfigsDir := filepath.Join(globalDir, "harness-configs")
+	if err := hubSrv.BootstrapHarnessConfigsFromDir(ctx, globalHarnessConfigsDir); err != nil {
+		log.Printf("Warning: harness config bootstrap failed: %v", err)
+	}
+
 	log.Printf("Database: %s (%s)", cfg.Database.Driver, cfg.Database.URL)
 
 	return hubSrv, nil
