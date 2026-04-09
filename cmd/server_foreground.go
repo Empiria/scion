@@ -623,7 +623,12 @@ func initDevAuth(cfg *config.GlobalConfig, globalDir string) (string, error) {
 func resolveHubEndpoint(cfg *config.GlobalConfig, brokerSettings *config.Settings) string {
 	hubEndpoint := cfg.Hub.Endpoint
 	if hubEndpoint == "" && enableHub {
-		if baseURL := os.Getenv("SCION_SERVER_BASE_URL"); baseURL != "" {
+		if webBaseURL != "" {
+			hubEndpoint = strings.TrimRight(webBaseURL, "/")
+			if enableDebug {
+				log.Printf("Hub endpoint resolved from --base-url flag: %s", hubEndpoint)
+			}
+		} else if baseURL := os.Getenv("SCION_SERVER_BASE_URL"); baseURL != "" {
 			hubEndpoint = strings.TrimRight(baseURL, "/")
 			if enableDebug {
 				log.Printf("Hub endpoint resolved from SCION_SERVER_BASE_URL: %s", hubEndpoint)
