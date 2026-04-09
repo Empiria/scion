@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -117,11 +118,18 @@ func DeleteAgentFiles(agentName string, grovePath string, removeBranch bool) (bo
 	}
 
 	// Phase 3: remove external agent home (git grove split storage).
+	// In podman rootless mode, files created as root inside the container are
+	// owned by a mapped subuid on the host, making them inaccessible to the
+	// normal user. If standard removal fails, try `podman unshare rm -rf`
+	// which enters the user namespace where the mapped UIDs are accessible.
 	if externalAgentDir != "" {
 		if _, err := os.Stat(externalAgentDir); err == nil {
 			util.Debugf("delete: removing external agent home: %s", externalAgentDir)
 			if err := util.RemoveAllSafe(externalAgentDir); err != nil {
-				util.Debugf("delete: external home removal failed: %v", err)
+				util.Debugf("delete: standard removal failed, trying podman unshare: %v", err)
+				if unshareErr := exec.Command("podman", "unshare", "rm", "-rf", externalAgentDir).Run(); unshareErr != nil {
+					util.Debugf("delete: podman unshare removal also failed: %v", unshareErr)
+				}
 			}
 		}
 	}
