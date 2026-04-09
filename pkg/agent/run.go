@@ -619,6 +619,16 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		effectiveWorkspace = extractWorkspaceFromVolumes(finalScionCfg.Volumes)
 	}
 
+	// Validate that the workspace directory exists before attempting to mount it.
+	// This is a safety net — GetAgent should have created/recreated it, but if
+	// the directory is still missing we fail early with a clear error rather than
+	// letting the container runtime produce a cryptic mount error.
+	if effectiveWorkspace != "" {
+		if _, err := os.Stat(effectiveWorkspace); os.IsNotExist(err) {
+			return nil, fmt.Errorf("workspace directory does not exist: %s (try deleting and recreating the agent)", effectiveWorkspace)
+		}
+	}
+
 	repoRoot := ""
 	if effectiveWorkspace != "" && util.IsGitRepoDir(effectiveWorkspace) {
 		commonDir, err := util.GetCommonGitDir(effectiveWorkspace)

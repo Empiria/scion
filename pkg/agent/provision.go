@@ -958,9 +958,27 @@ func GetAgent(ctx context.Context, agentName string, templateName string, agentI
 	agentHome := config.GetAgentHomePath(projectDir, agentName)
 	agentWorkspace := filepath.Join(agentDir, "workspace")
 
-	// If we are resuming, and it's not a git repo, the physical workspace dir might not exist.
-	if _, err := os.Stat(filepath.Join(agentWorkspace, ".git")); err != nil {
-		if _, err := os.Stat(agentWorkspace); os.IsNotExist(err) {
+	// If the managed workspace directory doesn't exist, try to recreate it.
+	// This handles the case where a worktree was removed (e.g. by git worktree
+	// prune, a previous incomplete deletion, or manual cleanup) but the agent
+	// config still exists.
+	if _, err := os.Stat(agentWorkspace); os.IsNotExist(err) {
+		if util.IsGitRepoDir(projectDir) {
+			// Recreate the worktree for git-backed workspaces.
+			targetBranch := branch
+			if targetBranch == "" {
+				targetBranch = api.Slugify(agentName)
+			}
+			if root, rootErr := util.RepoRootDir(filepath.Dir(agentWorkspace)); rootErr == nil {
+				_ = util.PruneWorktreesIn(root)
+			}
+			if err := util.CreateWorktree(agentWorkspace, targetBranch); err != nil {
+				util.Debugf("GetAgent: failed to recreate worktree at %s: %v, clearing workspace", agentWorkspace, err)
+				agentWorkspace = ""
+			} else {
+				util.Debugf("GetAgent: recreated missing worktree at %s (branch %s)", agentWorkspace, targetBranch)
+			}
+		} else {
 			agentWorkspace = ""
 		}
 	}

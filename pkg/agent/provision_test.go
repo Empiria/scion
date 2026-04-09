@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ import (
 	"github.com/GoogleCloudPlatform/scion/pkg/api"
 	"github.com/GoogleCloudPlatform/scion/pkg/config"
 	"github.com/GoogleCloudPlatform/scion/pkg/runtime"
+	"github.com/GoogleCloudPlatform/scion/pkg/util"
 )
 
 // seedTestHarnessConfig creates a minimal harness-config directory for testing.
@@ -1223,5 +1225,153 @@ func TestProvisionAgent_SharedWorkspaceNoCredentialWithoutFlag(t *testing.T) {
 	content := string(data)
 	if strings.Contains(content, "[credential]") {
 		t.Errorf("expected no [credential] section in .gitconfig for non-shared workspace, got:\n%s", content)
+	}
+}
+
+// TestGetAgent_RecreatesMissingWorktree verifies that when an existing agent's
+// managed workspace directory has been removed (e.g., by git worktree prune),
+// GetAgent recreates the worktree instead of returning an empty workspace path.
+func TestGetAgent_RecreatesMissingWorktree(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpDir)
+
+	// Create a git repo to act as the project root
+	projectDir := filepath.Join(tmpDir, "project")
+	os.MkdirAll(projectDir, 0755)
+	for _, args := range [][]string{
+		{"init"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test"},
+		{"commit", "--allow-empty", "-m", "initial"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = projectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+	}
+
+	// Set up .scion directory structure with templates
+	scionDir := filepath.Join(projectDir, ".scion")
+	os.MkdirAll(filepath.Join(scionDir, "templates"), 0755)
+
+	// Set up global scion with a harness config
+	globalScionDir := filepath.Join(tmpDir, ".scion")
+	os.MkdirAll(filepath.Join(globalScionDir, "templates"), 0755)
+	seedTestHarnessConfig(t, globalScionDir, "generic", "generic")
+	tplDir := filepath.Join(globalScionDir, "templates", "default")
+	os.MkdirAll(tplDir, 0755)
+	os.WriteFile(filepath.Join(tplDir, "scion-agent.json"), []byte(`{"default_harness_config":"generic"}`), 0644)
+
+	agentName := "ws-agent"
+	agentDir := filepath.Join(scionDir, "agents", agentName)
+	agentWorkspace := filepath.Join(agentDir, "workspace")
+	agentHome := config.GetAgentHomePath(scionDir, agentName)
+	os.MkdirAll(agentDir, 0755)
+	os.MkdirAll(agentHome, 0755)
+
+	// Create a worktree (simulating a successful first provision)
+	if err := util.CreateWorktree(agentWorkspace, agentName); err != nil {
+		t.Fatalf("CreateWorktree failed: %v", err)
+	}
+
+	// Write agent config (so GetAgent treats this as an existing agent)
+	os.WriteFile(filepath.Join(agentDir, "scion-agent.json"),
+		[]byte(`{"harness":"generic","default_harness_config":"generic"}`), 0644)
+
+	// Write agent-info.json to home
+	os.WriteFile(filepath.Join(agentHome, "agent-info.json"),
+		[]byte(`{"name":"ws-agent","template":"default"}`), 0644)
+
+	// Verify the worktree exists
+	if _, err := os.Stat(agentWorkspace); err != nil {
+		t.Fatalf("expected workspace to exist after creation: %v", err)
+	}
+
+	// Remove the workspace directory (simulating worktree prune or manual cleanup)
+	os.RemoveAll(agentWorkspace)
+	// Also prune the worktree records so git doesn't think it still exists
+	cmd := exec.Command("git", "worktree", "prune")
+	cmd.Dir = projectDir
+	cmd.Run()
+
+	// Verify workspace is gone
+	if _, err := os.Stat(agentWorkspace); !os.IsNotExist(err) {
+		t.Fatalf("expected workspace to be removed")
+	}
+
+	// Call GetAgent — it should recreate the worktree
+	_, _, wsPath, _, err := GetAgent(context.Background(), agentName, "", "", "", scionDir, "", "", "", "")
+	if err != nil {
+		t.Fatalf("GetAgent failed: %v", err)
+	}
+
+	// The workspace should now exist again
+	if wsPath == "" {
+		t.Fatal("expected GetAgent to return a non-empty workspace path after recreation")
+	}
+	if _, err := os.Stat(wsPath); os.IsNotExist(err) {
+		t.Fatalf("expected workspace directory to exist after GetAgent recreation, but it doesn't: %s", wsPath)
+	}
+
+	// Verify a .git file exists (worktree indicator)
+	if _, err := os.Stat(filepath.Join(wsPath, ".git")); os.IsNotExist(err) {
+		t.Error("expected .git file in recreated workspace (worktree marker)")
+	}
+}
+
+// TestGetAgent_MissingWorkspaceNonGit verifies that for a non-git project,
+// GetAgent returns empty workspace when the managed workspace dir doesn't exist.
+func TestGetAgent_MissingWorkspaceNonGit(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	oldWd, _ := os.Getwd()
+	os.Chdir(tmpDir)
+	defer os.Chdir(oldWd)
+
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+	os.Setenv("HOME", tmpDir)
+
+	// Set up global scion
+	globalScionDir := filepath.Join(tmpDir, ".scion")
+	os.MkdirAll(filepath.Join(globalScionDir, "templates"), 0755)
+	seedTestHarnessConfig(t, globalScionDir, "generic", "generic")
+	tplDir := filepath.Join(globalScionDir, "templates", "default")
+	os.MkdirAll(tplDir, 0755)
+	os.WriteFile(filepath.Join(tplDir, "scion-agent.json"), []byte(`{"default_harness_config":"generic"}`), 0644)
+
+	// Non-git project directory
+	projectDir := filepath.Join(tmpDir, "project")
+	scionDir := filepath.Join(projectDir, ".scion")
+	os.MkdirAll(scionDir, 0755)
+
+	agentName := "nongit-agent"
+	agentDir := filepath.Join(scionDir, "agents", agentName)
+	agentHome := config.GetAgentHomePath(scionDir, agentName)
+	os.MkdirAll(agentDir, 0755)
+	os.MkdirAll(agentHome, 0755)
+
+	// Write agent config (existing agent, no workspace dir)
+	os.WriteFile(filepath.Join(agentDir, "scion-agent.json"),
+		[]byte(`{"harness":"generic","default_harness_config":"generic"}`), 0644)
+	os.WriteFile(filepath.Join(agentHome, "agent-info.json"),
+		[]byte(`{"name":"nongit-agent","template":"default"}`), 0644)
+
+	_, _, wsPath, _, err := GetAgent(context.Background(), agentName, "", "", "", scionDir, "", "", "", "")
+	if err != nil {
+		t.Fatalf("GetAgent failed: %v", err)
+	}
+
+	// For non-git projects, workspace should be empty (external mount expected)
+	if wsPath != "" {
+		t.Errorf("expected empty workspace for non-git project, got: %s", wsPath)
 	}
 }
