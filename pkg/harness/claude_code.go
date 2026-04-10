@@ -173,9 +173,15 @@ func (c *ClaudeCode) provisionClaudeJSON(agentHome, agentWorkspace string) error
 		return err
 	}
 
-	repoRoot, err := util.RepoRoot()
 	containerWorkspace := "/workspace"
-	if err == nil {
+	// Derive the container workspace path from the agent directory structure.
+	// The host path is like .../grove/.scion/agents/<name>/workspace and maps
+	// to /repo-root/.scion/agents/<name>/workspace inside the container.
+	// Use the .scion/agents/ segment as a reliable anchor rather than
+	// util.RepoRoot() which depends on the broker's working directory.
+	if idx := strings.Index(agentWorkspace, "/.scion/agents/"); idx >= 0 {
+		containerWorkspace = "/repo-root" + agentWorkspace[idx:]
+	} else if repoRoot, err := util.RepoRoot(); err == nil {
 		relWorkspace, err := filepath.Rel(repoRoot, agentWorkspace)
 		if err == nil && !strings.HasPrefix(relWorkspace, "..") && relWorkspace != "." {
 			containerWorkspace = filepath.Join("/repo-root", relWorkspace)
@@ -202,7 +208,7 @@ func (c *ClaudeCode) provisionClaudeJSON(agentHome, agentWorkspace string) error
 			"mcpServers":                              map[string]interface{}{},
 			"enabledMcpjsonServers":                   []interface{}{},
 			"disabledMcpjsonServers":                  []interface{}{},
-			"hasTrustDialogAccepted":                  false,
+			"hasTrustDialogAccepted":                  true,
 			"projectOnboardingSeenCount":              1,
 			"hasClaudeMdExternalIncludesApproved":     false,
 			"hasClaudeMdExternalIncludesWarningShown": false,
