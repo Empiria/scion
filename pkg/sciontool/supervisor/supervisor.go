@@ -122,11 +122,11 @@ func (s *Supervisor) Run(ctx context.Context, args []string) (int, error) {
 	// UID/GID from the credential drop) gets permission denied on its own home.
 	if s.config.UID > 0 && s.config.GID > 0 && s.config.Username != "" {
 		home := "/home/" + s.config.Username
-		if err := chownRecursive(home, s.config.UID, s.config.GID); err != nil {
+		err := chownRecursive(home, s.config.UID, s.config.GID)
+		if err != nil {
 			log.Error("Failed to chown home directory %s: %v", home, err)
-		} else {
-			log.Debug("Chowned %s to %d:%d", home, s.config.UID, s.config.GID)
 		}
+		log.Debug("Chowned %s to %d:%d", home, s.config.UID, s.config.GID)
 	}
 
 	// Apply SCION_EXTRA_PATH: prepend its value to PATH, then remove it from env.
