@@ -138,8 +138,9 @@ func generateDownloadURLs(ctx context.Context, stor storage.Storage, basePath st
 //
 // with method PUT. The client's authenticated HTTP transport handles auth.
 // requestBaseURL derives the external base URL from the incoming HTTP request.
-// It uses X-Forwarded-Proto and X-Forwarded-Host if set (reverse proxy), falling
-// back to the request's TLS state and Host header.
+// It trusts X-Forwarded-Proto and X-Forwarded-Host when present, which assumes
+// the hub is behind a trusted reverse proxy that overwrites those headers.
+// Otherwise it falls back to the request's TLS state and Host header.
 func requestBaseURL(r *http.Request) string {
 	host := r.Header.Get("X-Forwarded-Host")
 	if host == "" {
@@ -155,7 +156,7 @@ func requestBaseURL(r *http.Request) string {
 	return "http://" + host
 }
 
-func rewriteLocalUploadURLs(urls []UploadURLInfo, hubEndpoint, resourceType, resourceID, authHeader string) []UploadURLInfo {
+func rewriteLocalUploadURLs(urls []UploadURLInfo, hubEndpoint, resourceType, resourceID string) []UploadURLInfo {
 	if hubEndpoint == "" {
 		return urls
 	}
@@ -167,9 +168,6 @@ func rewriteLocalUploadURLs(urls []UploadURLInfo, hubEndpoint, resourceType, res
 			urls[i].Headers = map[string]string{
 				"Content-Type": "application/octet-stream",
 			}
-			if authHeader != "" {
-				urls[i].Headers["Authorization"] = authHeader
-			}
 		}
 	}
 	return urls
@@ -179,7 +177,7 @@ func rewriteLocalUploadURLs(urls []UploadURLInfo, hubEndpoint, resourceType, res
 // the hub's own file read endpoint for downloads. Same rationale as
 // rewriteLocalUploadURLs — file:// URLs reference server-side paths that are
 // inaccessible from remote clients.
-func rewriteLocalDownloadURLs(urls []DownloadURLInfo, hubEndpoint, resourceType, resourceID, authHeader string) []DownloadURLInfo {
+func rewriteLocalDownloadURLs(urls []DownloadURLInfo, hubEndpoint, resourceType, resourceID string) []DownloadURLInfo {
 	if hubEndpoint == "" {
 		return urls
 	}

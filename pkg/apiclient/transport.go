@@ -174,11 +174,12 @@ type authRoundTripper struct {
 }
 
 func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	if rt.ua != "" && req.Header.Get("User-Agent") == "" {
-		req.Header.Set("User-Agent", rt.ua)
+	clone := req.Clone(req.Context())
+	if rt.ua != "" && clone.Header.Get("User-Agent") == "" {
+		clone.Header.Set("User-Agent", rt.ua)
 	}
 	if rt.auth != nil {
-		if err := rt.auth.ApplyAuth(req); err != nil {
+		if err := rt.auth.ApplyAuth(clone); err != nil {
 			return nil, fmt.Errorf("failed to apply auth: %w", err)
 		}
 	}
@@ -186,7 +187,7 @@ func (rt *authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error)
 	if base == nil {
 		base = http.DefaultTransport
 	}
-	return base.RoundTrip(req)
+	return base.RoundTrip(clone)
 }
 
 // buildURL joins the base URL with a path and optional query parameters.

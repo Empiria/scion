@@ -22,7 +22,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/GoogleCloudPlatform/scion/pkg/storage"
@@ -184,8 +187,12 @@ func (s *Server) handleTemplateFileRead(w http.ResponseWriter, r *http.Request, 
 		}
 		defer reader.Close()
 
+		safeName := filepath.Base(filePath)
+		contentDisposition := mime.FormatMediaType("attachment", map[string]string{"filename": safeName})
+
 		w.Header().Set("Content-Type", "application/octet-stream")
-		w.Header().Set("Content-Disposition", `attachment; filename="`+filePath+`"`)
+		w.Header().Set("Content-Disposition", contentDisposition)
+		w.Header().Set("Content-Length", strconv.FormatInt(found.Size, 10))
 		w.WriteHeader(http.StatusOK)
 		if _, err := io.Copy(w, reader); err != nil {
 			slog.Error("Error streaming file to client", "path", objectPath, "error", err)
@@ -340,6 +347,8 @@ func (s *Server) handleTemplateFileWrite(w http.ResponseWriter, r *http.Request,
 // returns HTTP URLs pointing to this endpoint, and the client PUTs file content directly.
 func (s *Server) handleTemplateFileWriteRaw(w http.ResponseWriter, r *http.Request, template *store.Template, filePath string, stor storage.Storage) {
 	ctx := r.Context()
+
+	defer r.Body.Close()
 
 	data, err := io.ReadAll(io.LimitReader(r.Body, maxUploadFileSize+1))
 	if err != nil {

@@ -279,7 +279,7 @@ func (s *Server) createTemplateV2(w http.ResponseWriter, r *http.Request) {
 			// For local storage, rewrite file:// URLs to HTTP proxy URLs
 			if stor.Provider() == storage.ProviderLocal {
 				hubURL := requestBaseURL(r)
-				uploadURLs = rewriteLocalUploadURLs(uploadURLs, hubURL, "templates", template.ID, r.Header.Get("Authorization"))
+				uploadURLs = rewriteLocalUploadURLs(uploadURLs, hubURL, "templates", template.ID)
 			}
 			response.UploadURLs = uploadURLs
 			response.ManifestURL = manifestURL
@@ -549,7 +549,7 @@ func (s *Server) handleTemplateUpload(w http.ResponseWriter, r *http.Request, id
 	// For local storage, rewrite file:// URLs to HTTP proxy URLs
 	if stor.Provider() == storage.ProviderLocal {
 		hubURL := requestBaseURL(r)
-		uploadURLs = rewriteLocalUploadURLs(uploadURLs, hubURL, "templates", id, r.Header.Get("Authorization"))
+		uploadURLs = rewriteLocalUploadURLs(uploadURLs, hubURL, "templates", id)
 	}
 
 	response := UploadResponse{
@@ -644,7 +644,7 @@ func (s *Server) handleTemplateDownload(w http.ResponseWriter, r *http.Request, 
 	// For local storage, rewrite file:// URLs to HTTP proxy URLs
 	if stor.Provider() == storage.ProviderLocal {
 		hubURL := requestBaseURL(r)
-		downloadURLs = rewriteLocalDownloadURLs(downloadURLs, hubURL, "templates", id, r.Header.Get("Authorization"))
+		downloadURLs = rewriteLocalDownloadURLs(downloadURLs, hubURL, "templates", id)
 	}
 
 	response := DownloadResponse{
