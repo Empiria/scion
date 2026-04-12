@@ -266,6 +266,57 @@ func TestChannelEventPublisher_PublishGroveCreated(t *testing.T) {
 	}
 }
 
+func TestChannelEventPublisher_PublishUserMessage_FanOut(t *testing.T) {
+	// Verify a single PublishUserMessage call fans out to all three
+	// subjects: user.<recipient>.message, grove.<grove>.user.message,
+	// and agent.<agent>.message (the last one is what the per-agent
+	// Messages tab stream subscribes to).
+	pub := NewChannelEventPublisher()
+	defer pub.Close()
+
+	userCh, unsubUser := pub.Subscribe("user.u1.message")
+	defer unsubUser()
+	groveCh, unsubGrove := pub.Subscribe("grove.g1.user.message")
+	defer unsubGrove()
+	agentCh, unsubAgent := pub.Subscribe("agent.a1.message")
+	defer unsubAgent()
+
+	msg := &store.Message{
+		ID:          "m1",
+		GroveID:     "g1",
+		Sender:      "agent:coder",
+		SenderID:    "a1",
+		Recipient:   "user:alice",
+		RecipientID: "u1",
+		Msg:         "All done.",
+		Type:        "assistant-reply",
+		AgentID:     "a1",
+		CreatedAt:   time.Now().UTC(),
+	}
+
+	pub.PublishUserMessage(context.Background(), msg)
+
+	for name, ch := range map[string]<-chan Event{
+		"user":  userCh,
+		"grove": groveCh,
+		"agent": agentCh,
+	} {
+		select {
+		case evt := <-ch:
+			var payload UserMessageEvent
+			if err := json.Unmarshal(evt.Data, &payload); err != nil {
+				t.Fatalf("%s: unmarshal: %v", name, err)
+			}
+			if payload.ID != "m1" || payload.AgentID != "a1" ||
+				payload.RecipientID != "u1" || payload.Msg != "All done." {
+				t.Errorf("%s: unexpected payload: %+v", name, payload)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("%s: timeout waiting for user message event", name)
+		}
+	}
+}
+
 func TestChannelEventPublisher_PublishBrokerConnected(t *testing.T) {
 	pub := NewChannelEventPublisher()
 	defer pub.Close()

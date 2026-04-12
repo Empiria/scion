@@ -9,6 +9,7 @@ const (
 	AgentActionRestart           = "restart"
 	AgentActionMessage           = "message"
 	AgentActionMessages          = "messages"
+	AgentActionMessagesStream    = "messages/stream"
 	AgentActionExec              = "exec"
 	AgentActionRestore           = "restore"
 	AgentActionEnv               = "env"

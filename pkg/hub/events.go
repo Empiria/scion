@@ -413,8 +413,16 @@ func (p *ChannelEventPublisher) PublishNotification(_ context.Context, notif *st
 	p.publish("notification.created", evt)
 }
 
-// PublishUserMessage publishes a user.message event when an agent sends a message
-// to a human. The event is published to user-specific and grove-scoped subjects.
+// PublishUserMessage publishes a user.message event when a message involving
+// a human user is persisted — either an agent→user reply (from
+// handleAgentOutboundMessage) or a user→agent instruction (from
+// handleAgentMessage). The event is fanned out to several subjects so
+// different consumers can subscribe at the granularity they need:
+//
+//   - user.<recipientID>.message — inbox-tray for the message's addressee
+//   - grove.<groveID>.user.message — grove-level user-message feeds
+//   - agent.<agentID>.message — per-agent conversation streams (both
+//     directions; subscribers filter by user participation themselves)
 func (p *ChannelEventPublisher) PublishUserMessage(_ context.Context, msg *store.Message) {
 	evt := UserMessageEvent{
 		ID:          msg.ID,
@@ -434,6 +442,9 @@ func (p *ChannelEventPublisher) PublishUserMessage(_ context.Context, msg *store
 	}
 	if msg.GroveID != "" {
 		p.publish("grove."+msg.GroveID+".user.message", evt)
+	}
+	if msg.AgentID != "" {
+		p.publish("agent."+msg.AgentID+".message", evt)
 	}
 }
 

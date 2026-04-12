@@ -15,9 +15,12 @@
 package hub
 
 import (
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/GoogleCloudPlatform/scion/pkg/store"
 )
@@ -198,4 +201,101 @@ func (s *Server) handleAgentMessages(w http.ResponseWriter, r *http.Request, age
 	}
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// handleAgentMessagesStream handles GET /api/v1/agents/{id}/messages/stream.
+// Streams new messages involving a specific agent in real time, scoped to
+// the conversation between the current authenticated user and the agent.
+// Unlike /message-logs/stream this does not depend on Cloud Logging: it
+// subscribes to the in-process event bus that handleAgentOutboundMessage
+// and handleAgentMessage already publish to, so it works on any hub
+// deployment with no additional configuration.
+func (s *Server) handleAgentMessagesStream(w http.ResponseWriter, r *http.Request, agentID string) {
+	if r.Method != http.MethodGet {
+		MethodNotAllowed(w)
+		return
+	}
+
+	ctx := r.Context()
+	user := GetUserIdentityFromContext(ctx)
+	if user == nil {
+		Forbidden(w)
+		return
+	}
+
+	agent, err := s.store.GetAgent(ctx, agentID)
+	if err != nil {
+		writeErrorFromErr(w, err, "")
+		return
+	}
+
+	decision := s.authzService.CheckAccess(ctx, user, agentResource(agent), ActionRead)
+	if !decision.Allowed {
+		writeError(w, http.StatusForbidden, ErrCodeForbidden, "Access denied", nil)
+		return
+	}
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// The event bus is an interface; only ChannelEventPublisher supports
+	// subscription. A hub configured with a noop publisher has no source
+	// of real-time events to stream, so surface a clear 501 instead of
+	// silently returning an empty stream.
+	ep, ok := s.events.(*ChannelEventPublisher)
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "not_implemented",
+			"Real-time message streaming is not available on this hub", nil)
+		return
+	}
+
+	// Clear the server's write deadline for this long-lived connection —
+	// without this the global WriteTimeout will kill the stream and cause
+	// reconnection churn, matching the pattern in web.go's SSE handler.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		slog.Debug("Failed to clear write deadline for messages stream", "error", err)
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	flusher.Flush()
+
+	ch, unsubscribe := ep.Subscribe("agent." + agent.ID + ".message")
+	defer unsubscribe()
+
+	userID := user.ID()
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case evt, ok := <-ch:
+			if !ok {
+				return
+			}
+			// Filter: only forward events where the current user is a
+			// participant. Without this the stream would include messages
+			// from every other user's conversation with this agent.
+			var payload UserMessageEvent
+			if err := json.Unmarshal(evt.Data, &payload); err != nil {
+				continue
+			}
+			if payload.SenderID != userID && payload.RecipientID != userID {
+				continue
+			}
+			fmt.Fprintf(w, "event: message\ndata: %s\n\n", evt.Data)
+			flusher.Flush()
+		case <-heartbeat.C:
+			fmt.Fprintf(w, ":heartbeat %d\n\n", time.Now().UnixMilli())
+			flusher.Flush()
+		case <-ctx.Done():
+			return
+		}
+	}
 }

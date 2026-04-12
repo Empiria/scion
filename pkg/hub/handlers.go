@@ -1375,9 +1375,14 @@ func (s *Server) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle per-agent messages list (GET, handled before the POST-only
-	// action gate). Returns the bidirectional conversation between the
-	// authenticated user and this agent from the hub message store.
+	// Handle per-agent messages (GET endpoints, handled before the
+	// POST-only action gate). Both the list and the real-time stream
+	// are backed by the hub message store / event bus and work without
+	// Cloud Logging being configured.
+	if action == api.AgentActionMessagesStream {
+		s.handleAgentMessagesStream(w, r, id)
+		return
+	}
 	if action == api.AgentActionMessages {
 		s.handleAgentMessages(w, r, id)
 		return
@@ -2291,6 +2296,10 @@ func (s *Server) handleAgentMessage(w http.ResponseWriter, r *http.Request, id s
 		if err := s.store.CreateMessage(ctx, storeMsg); err != nil {
 			s.messageLog.Error("Failed to persist message", "error", err)
 		}
+		// Publish SSE event so connected browser clients can update the
+		// per-agent conversation view in real time — mirrors the agent→user
+		// publish path in handleAgentOutboundMessage.
+		s.events.PublishUserMessage(ctx, storeMsg)
 	}
 
 	// If a dispatcher is available, dispatch the message to the runtime broker
