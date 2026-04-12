@@ -909,9 +909,7 @@ export class ScionPageAgentDetail extends LitElement {
       <sl-tab-group @sl-tab-show=${this.handleTabShow}>
         <sl-tab slot="nav" panel="status">Status</sl-tab>
         ${this.agent.cloudLogging ? html`<sl-tab slot="nav" panel="logs">Logs</sl-tab>` : nothing}
-        ${this.agent.cloudLogging
-          ? html`<sl-tab slot="nav" panel="messages">Messages</sl-tab>`
-          : nothing}
+        <sl-tab slot="nav" panel="messages">Messages</sl-tab>
         <sl-tab slot="nav" panel="configuration">Configuration</sl-tab>
 
         <sl-tab-panel name="status">${this.renderStatusTab()}</sl-tab-panel>
@@ -930,17 +928,13 @@ export class ScionPageAgentDetail extends LitElement {
               </sl-tab-panel>
             `
           : nothing}
-        ${this.agent.cloudLogging
-          ? html`
-              <sl-tab-panel name="messages">
-                <scion-agent-message-viewer
-                  agentId=${this.agentId}
-                  agentName=${this.agent.name || ''}
-                  ?canSend=${can(this.agent._capabilities, 'message')}
-                ></scion-agent-message-viewer>
-              </sl-tab-panel>
-            `
-          : nothing}
+        <sl-tab-panel name="messages">
+          <scion-agent-message-viewer
+            agentId=${this.agentId}
+            agentName=${this.agent.name || ''}
+            ?canSend=${can(this.agent._capabilities, 'message')}
+          ></scion-agent-message-viewer>
+        </sl-tab-panel>
         <sl-tab-panel name="configuration">${this.renderConfigurationTab()}</sl-tab-panel>
       </sl-tab-group>
     `;
