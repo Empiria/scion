@@ -5,6 +5,8 @@ Copyright 2025 The Scion Authors.
 package dialects
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/GoogleCloudPlatform/scion/pkg/sciontool/hooks"
@@ -15,6 +17,99 @@ import (
 func TestClaudeDialect_Name(t *testing.T) {
 	d := NewClaudeDialect()
 	assert.Equal(t, "claude", d.Name())
+}
+
+func TestExtractFinalAssistantText(t *testing.T) {
+	dir := t.TempDir()
+
+	write := func(t *testing.T, name, content string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+		return path
+	}
+
+	t.Run("single assistant turn with text block", func(t *testing.T) {
+		path := write(t, "single.jsonl",
+			`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"hi"}]}}`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Hello there"}]}}`+"\n",
+		)
+		assert.Equal(t, "Hello there", extractFinalAssistantText(path))
+	})
+
+	t.Run("multiple blocks in final assistant message", func(t *testing.T) {
+		path := write(t, "multiblock.jsonl",
+			`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Thinking..."},{"type":"tool_use","id":"t1","name":"Read","input":{}},{"type":"text","text":"Done."}]}}`+"\n",
+		)
+		assert.Equal(t, "Thinking...Done.", extractFinalAssistantText(path))
+	})
+
+	t.Run("contiguous assistant entries concatenated", func(t *testing.T) {
+		path := write(t, "contiguous.jsonl",
+			`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"go"}]}}`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"First"}]}}`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}`+"\n"+
+				`{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"..."}]}}`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Second"}]}}`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Third"}]}}`+"\n",
+		)
+		assert.Equal(t, "Second\n\nThird", extractFinalAssistantText(path))
+	})
+
+	t.Run("tool-use only final turn yields empty", func(t *testing.T) {
+		path := write(t, "toolonly.jsonl",
+			`{"type":"user","message":{"role":"user","content":[{"type":"text","text":"go"}]}}`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}`+"\n",
+		)
+		assert.Equal(t, "", extractFinalAssistantText(path))
+	})
+
+	t.Run("plain string content", func(t *testing.T) {
+		path := write(t, "plainstr.jsonl",
+			`{"type":"assistant","message":{"role":"assistant","content":"Legacy shape"}}`+"\n",
+		)
+		assert.Equal(t, "Legacy shape", extractFinalAssistantText(path))
+	})
+
+	t.Run("missing file returns empty", func(t *testing.T) {
+		assert.Equal(t, "", extractFinalAssistantText(filepath.Join(dir, "nope.jsonl")))
+	})
+
+	t.Run("malformed lines are skipped", func(t *testing.T) {
+		path := write(t, "malformed.jsonl",
+			`not json at all`+"\n"+
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"Survived"}]}}`+"\n"+
+				`{"type":"assistant","broken`+"\n",
+		)
+		assert.Equal(t, "Survived", extractFinalAssistantText(path))
+	})
+}
+
+func TestClaudeDialect_StopEventExtractsAssistantText(t *testing.T) {
+	dir := t.TempDir()
+	transcriptPath := filepath.Join(dir, "t.jsonl")
+	content := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"All done."}]}}` + "\n"
+	require.NoError(t, os.WriteFile(transcriptPath, []byte(content), 0o600))
+
+	d := NewClaudeDialect()
+	event, err := d.Parse(map[string]interface{}{
+		"hook_event_name": "Stop",
+		"transcript_path": transcriptPath,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, hooks.EventAgentEnd, event.Name)
+	assert.Equal(t, "All done.", event.Data.AssistantText)
+}
+
+func TestClaudeDialect_NonStopEventDoesNotExtract(t *testing.T) {
+	d := NewClaudeDialect()
+	event, err := d.Parse(map[string]interface{}{
+		"hook_event_name": "PreToolUse",
+		"transcript_path": "/does/not/exist",
+		"tool_name":       "Read",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, event.Data.AssistantText)
 }
 
 func TestClaudeDialect_Parse(t *testing.T) {

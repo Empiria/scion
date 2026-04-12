@@ -124,6 +124,24 @@ func (h *HubHandler) Handle(event *hooks.Event) error {
 		})
 
 	case hooks.EventToolEnd, hooks.EventAgentEnd, hooks.EventModelEnd:
+		// Forward assistant text (when the dialect extracted it — e.g.
+		// Claude's Stop hook via transcript_path) to the hub message
+		// store as an outbound agent→user reply. This is what makes
+		// assistant responses show up in the Messages tab. Best-effort:
+		// failure here must not break the status update flow below.
+		if event.Name == hooks.EventAgentEnd && event.Data.AssistantText != "" {
+			msgCtx, msgCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if msgErr := h.client.SendOutboundMessage(msgCtx, hub.OutboundMessage{
+				Msg:  event.Data.AssistantText,
+				Type: "assistant-reply",
+			}); msgErr != nil {
+				log.Error("Hub: outbound assistant reply failed: %v", msgErr)
+			} else {
+				log.Debug("Hub: Forwarded assistant reply to message store (%d bytes)", len(event.Data.AssistantText))
+			}
+			msgCancel()
+		}
+
 		// Check if local activity is sticky before sending idle
 		if h.isLocalActivitySticky() {
 			log.Debug("Hub: Skipping idle (local activity is sticky)")

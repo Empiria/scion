@@ -42,6 +42,15 @@ type EventData struct {
 	OutputTokens int64 `json:"output_tokens,omitempty"`
 	CachedTokens int64 `json:"cached_tokens,omitempty"`
 
+	// AssistantText holds the textual output of the agent's final turn,
+	// populated by dialect parsers for end-of-turn events when the
+	// underlying harness exposes assistant content (e.g. Claude Code's
+	// Stop hook via transcript_path). Handlers may forward this to the
+	// hub message store as an outbound agent→user message so the Messages
+	// tab reflects agent replies without re-ingesting the entire
+	// transcript.
+	AssistantText string `json:"assistant_text,omitempty"`
+
 	// Status fields
 	Success bool   `json:"success,omitempty"`
 	Error   string `json:"error,omitempty"`
