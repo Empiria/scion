@@ -273,6 +273,11 @@ func (s *Server) handleAgentMessagesStream(w http.ResponseWriter, r *http.Reques
 	heartbeat := time.NewTicker(30 * time.Second)
 	defer heartbeat.Stop()
 
+	// Server-side timeout matching handlers_logs.go: tell the client to
+	// reconnect after 10 minutes so long-lived connections don't accumulate.
+	timeout := time.NewTimer(10 * time.Minute)
+	defer timeout.Stop()
+
 	for {
 		select {
 		case evt, ok := <-ch:
@@ -294,6 +299,10 @@ func (s *Server) handleAgentMessagesStream(w http.ResponseWriter, r *http.Reques
 		case <-heartbeat.C:
 			fmt.Fprintf(w, ":heartbeat %d\n\n", time.Now().UnixMilli())
 			flusher.Flush()
+		case <-timeout.C:
+			fmt.Fprintf(w, "event: timeout\ndata: {\"message\":\"stream timeout, please reconnect\"}\n\n")
+			flusher.Flush()
+			return
 		case <-ctx.Done():
 			return
 		}
