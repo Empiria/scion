@@ -127,9 +127,11 @@ func DeleteAgentFiles(agentName string, grovePath string, removeBranch bool) (bo
 			util.Debugf("delete: removing external agent home: %s", externalAgentDir)
 			if err := util.RemoveAllSafe(externalAgentDir); err != nil {
 				util.Debugf("delete: standard removal failed, trying podman unshare: %v", err)
-				if unshareErr := exec.Command("podman", "unshare", "rm", "-rf", externalAgentDir).Run(); unshareErr != nil {
+				unshareCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				if unshareErr := exec.CommandContext(unshareCtx, "podman", "unshare", "rm", "-rf", externalAgentDir).Run(); unshareErr != nil {
 					util.Debugf("delete: podman unshare removal also failed: %v", unshareErr)
 				}
+				cancel()
 			}
 		}
 	}
