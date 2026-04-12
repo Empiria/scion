@@ -1375,6 +1375,14 @@ func (s *Server) handleAgentByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle per-agent messages list (GET, handled before the POST-only
+	// action gate). Returns the bidirectional conversation between the
+	// authenticated user and this agent from the hub message store.
+	if action == api.AgentActionMessages {
+		s.handleAgentMessages(w, r, id)
+		return
+	}
+
 	// Handle actions
 	if action != "" {
 		s.handleAgentAction(w, r, id, action)
