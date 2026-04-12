@@ -1020,8 +1020,16 @@ type MessageFilter struct {
 	AgentID     string // Filter by involved agent
 	RecipientID string // Filter by recipient
 	SenderID    string // Filter by sender
-	OnlyUnread  bool   // Only unread messages
-	Type        string // Filter by message type
+	// ParticipantID matches messages where the given ID is either the
+	// recipient or the sender — i.e. "messages this user participated
+	// in". Exactly what you want when rendering a bidirectional
+	// conversation view. Combined with AgentID this returns both sides
+	// of the chat between the user and an agent. Ignored when empty.
+	// Evaluated independently of RecipientID/SenderID; callers
+	// generally pick one approach or the other.
+	ParticipantID string
+	OnlyUnread    bool   // Only unread messages
+	Type          string // Filter by message type
 }
 
 // =============================================================================

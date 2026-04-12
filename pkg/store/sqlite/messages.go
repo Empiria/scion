@@ -107,6 +107,10 @@ func (s *SQLiteStore) ListMessages(ctx context.Context, filter store.MessageFilt
 		conditions = append(conditions, "sender_id = ?")
 		args = append(args, filter.SenderID)
 	}
+	if filter.ParticipantID != "" {
+		conditions = append(conditions, "(recipient_id = ? OR sender_id = ?)")
+		args = append(args, filter.ParticipantID, filter.ParticipantID)
+	}
 	if filter.OnlyUnread {
 		conditions = append(conditions, "read = 0")
 	}

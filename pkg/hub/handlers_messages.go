@@ -144,16 +144,34 @@ func (s *Server) handleMessageRoutes(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAgentMessages handles GET /api/v1/agents/{id}/messages.
-// Returns messages involving a specific agent, scoped to the authenticated user.
+// Returns both sides of the conversation between the authenticated user
+// and the specified agent (messages where the user is either the sender
+// or the recipient, scoped to this agent). Authorisation is enforced via
+// the agent read permission rather than a per-row recipient check, so
+// agents' outbound replies and the user's own sent messages both render
+// in the viewer.
 func (s *Server) handleAgentMessages(w http.ResponseWriter, r *http.Request, agentID string) {
 	if r.Method != http.MethodGet {
 		MethodNotAllowed(w)
 		return
 	}
 
-	user := GetUserIdentityFromContext(r.Context())
+	ctx := r.Context()
+	user := GetUserIdentityFromContext(ctx)
 	if user == nil {
 		Forbidden(w)
+		return
+	}
+
+	agent, err := s.store.GetAgent(ctx, agentID)
+	if err != nil {
+		writeErrorFromErr(w, err, "")
+		return
+	}
+
+	decision := s.authzService.CheckAccess(ctx, user, agentResource(agent), ActionRead)
+	if !decision.Allowed {
+		writeError(w, http.StatusForbidden, ErrCodeForbidden, "Access denied", nil)
 		return
 	}
 
@@ -169,11 +187,11 @@ func (s *Server) handleAgentMessages(w http.ResponseWriter, r *http.Request, age
 	}
 
 	filter := store.MessageFilter{
-		AgentID:     agentID,
-		RecipientID: user.ID(),
+		AgentID:       agentID,
+		ParticipantID: user.ID(),
 	}
 
-	result, err := s.store.ListMessages(r.Context(), filter, opts)
+	result, err := s.store.ListMessages(ctx, filter, opts)
 	if err != nil {
 		writeErrorFromErr(w, err, "")
 		return

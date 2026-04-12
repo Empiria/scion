@@ -162,6 +162,66 @@ func TestListMessages(t *testing.T) {
 	assert.Equal(t, 0, result.TotalCount)
 }
 
+func TestListMessages_ParticipantID(t *testing.T) {
+	s := setupTestStore(t)
+	ctx := context.Background()
+
+	groveID, agentID := createTestGroveAndAgent(t, s)
+	userID := "user-uuid-alice"
+
+	// Inbound: user → agent. Sender=user, recipient=agent.
+	inbound := newTestMessage(groveID, agentID)
+	inbound.SenderID = userID
+	inbound.RecipientID = agentID
+	require.NoError(t, s.CreateMessage(ctx, inbound))
+
+	// Outbound: agent → user. Sender=agent, recipient=user.
+	outbound := &store.Message{
+		ID:          api.NewUUID(),
+		GroveID:     groveID,
+		Sender:      "agent:coder",
+		SenderID:    agentID,
+		Recipient:   "user:alice",
+		RecipientID: userID,
+		Msg:         "Done — here's the patch.",
+		Type:        "assistant-reply",
+		AgentID:     agentID,
+		CreatedAt:   time.Now().UTC().Truncate(time.Second),
+	}
+	require.NoError(t, s.CreateMessage(ctx, outbound))
+
+	// Unrelated message in the same grove/agent with a different user.
+	other := &store.Message{
+		ID:          api.NewUUID(),
+		GroveID:     groveID,
+		Sender:      "user:bob",
+		SenderID:    "user-uuid-bob",
+		Recipient:   "agent:coder",
+		RecipientID: agentID,
+		Msg:         "Bob's message",
+		Type:        "instruction",
+		AgentID:     agentID,
+		CreatedAt:   time.Now().UTC().Truncate(time.Second),
+	}
+	require.NoError(t, s.CreateMessage(ctx, other))
+
+	// ParticipantID + AgentID returns both sides of the alice↔agent chat
+	// but not bob's message.
+	result, err := s.ListMessages(ctx, store.MessageFilter{
+		AgentID:       agentID,
+		ParticipantID: userID,
+	}, store.ListOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.TotalCount)
+	gotIDs := map[string]bool{}
+	for _, m := range result.Items {
+		gotIDs[m.ID] = true
+	}
+	assert.True(t, gotIDs[inbound.ID], "inbound (user→agent) should match")
+	assert.True(t, gotIDs[outbound.ID], "outbound (agent→user) should match")
+	assert.False(t, gotIDs[other.ID], "bob's message should not match alice's participant filter")
+}
+
 func TestPurgeOldMessages(t *testing.T) {
 	s := setupTestStore(t)
 	ctx := context.Background()
