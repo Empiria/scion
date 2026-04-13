@@ -77,6 +77,8 @@ gcloud services enable \
     cloudtrace.googleapis.com \
     monitoring.googleapis.com \
     logging.googleapis.com \
+    iam.googleapis.com \
+    iamcredentials.googleapis.com \
     --project "${PROJECT_ID}"
 
 # Check if instance already exists
@@ -154,6 +156,9 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member "serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
     --role "roles/storage.objectAdmin" > /dev/null
+gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
+    --member "serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
+    --role "roles/iam.serviceAccountAdmin" > /dev/null
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
     --member "serviceAccount:${SERVICE_ACCOUNT_EMAIL}" \
     --role "roles/iam.serviceAccountTokenCreator" > /dev/null
