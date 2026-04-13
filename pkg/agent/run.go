@@ -407,6 +407,26 @@ func (m *AgentManager) Start(ctx context.Context, opts api.StartOptions) (*api.A
 		}
 		resolvedAuth = resolved
 		opts.ResolvedSecrets = filterResolvedSecretsForResolvedAuth(opts.ResolvedSecrets, &resolvedForSecretFilter)
+		// The hub pre-merges environment-type secrets into ResolvedEnv before
+		// dispatching to the broker (see pkg/hub/httpdispatcher.go), so auth
+		// env keys copied into opts.Env via start_context's ResolvedEnv merge
+		// would otherwise slip through even after ResolvedSecrets filtering.
+		// Drop auth-candidate env keys that the resolved auth method does not
+		// use, mirroring the ResolvedSecrets filter.
+		if len(opts.Env) > 0 {
+			requiredAuthEnv := make(map[string]struct{}, len(resolvedForSecretFilter.EnvVars))
+			for k := range resolvedForSecretFilter.EnvVars {
+				requiredAuthEnv[k] = struct{}{}
+			}
+			for k := range opts.Env {
+				if !isAuthEnvKey(k) {
+					continue
+				}
+				if _, required := requiredAuthEnv[k]; !required {
+					delete(opts.Env, k)
+				}
+			}
+		}
 
 		// Persist the resolved auth method so it can be reported to the Hub.
 		// For auto-detected auth, opts.HarnessAuth may be empty; capture the
