@@ -26,6 +26,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { PageData, Grove, Template, AdminGroup, GitHubAppGroveStatus, GitHubTokenPermissions, RuntimeBroker, BrokerProfile, GCPServiceAccount } from '../../shared/types.js';
 import { can, canAny } from '../../shared/types.js';
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import '../shared/env-var-list.js';
 import '../shared/secret-list.js';
 import '../shared/shared-dir-list.js';
@@ -760,6 +761,7 @@ export class ScionPageGroveSettings extends LitElement {
       }
 
       this.grove = (await response.json()) as Grove;
+      dispatchPageTitle(this, 'Settings', this.grove.name || this.groveId);
       // Pre-populate template import URL with the grove's git remote when set
       if (this.grove.gitRemote && !this.syncRepoUrl) {
         this.syncRepoUrl = this.grove.gitRemote;

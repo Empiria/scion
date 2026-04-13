@@ -48,6 +48,7 @@ interface AgentNotificationsResponse {
 }
 import type { StatusType } from '../shared/status-badge.js';
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import { stateManager } from '../../client/state.js';
 import '../shared/status-badge.js';
 import '../shared/agent-log-viewer.js';
@@ -693,6 +694,9 @@ export class ScionPageAgentDetail extends LitElement {
       stateManager.seedAgents([this.agent]);
       if (this.grove) {
         stateManager.seedGroves([this.grove]);
+        dispatchPageTitle(this, this.agent.name, this.grove.name || this.agent.groveId);
+      } else {
+        dispatchPageTitle(this, this.agent.name, 'Agents');
       }
     } catch (err) {
       console.error('Failed to load agent:', err);

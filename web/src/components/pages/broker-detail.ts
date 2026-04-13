@@ -28,6 +28,7 @@ import type { PageData, RuntimeBroker, Agent } from '../../shared/types.js';
 import { getAgentDisplayStatus } from '../../shared/types.js';
 import type { StatusType } from '../shared/status-badge.js';
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import { stateManager } from '../../client/state.js';
 import '../shared/status-badge.js';
 
@@ -475,6 +476,7 @@ export class ScionPageBrokerDetail extends LitElement {
       }
 
       this.broker = (await brokerResponse.json()) as RuntimeBroker;
+      dispatchPageTitle(this, this.broker.name || this.brokerId, 'Brokers');
 
       if (grovesResponse.ok) {
         const grovesData = (await grovesResponse.json()) as { groves?: BrokerGroveInfo[] };

@@ -25,6 +25,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import type { Agent, CapabilityField, GCPIdentityConfig, GCPServiceAccount, HarnessAdvancedCapabilities } from '../../shared/types.js';
 import type { EnvEntry } from '../shared/env-editor.js';
 import '../shared/env-editor.js';
@@ -397,6 +398,7 @@ export class ScionPageAgentConfigure extends LitElement {
       }
 
       this.agent = (await agentRes.json()) as AgentWithConfig;
+      dispatchPageTitle(this, 'Configure', this.agent.name || this.agentId);
 
       if (this.agent.phase !== 'created') {
         this.error = `This agent is in "${this.agent.phase}" phase and cannot be configured. Only agents in "created" phase can be edited.`;

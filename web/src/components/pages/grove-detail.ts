@@ -27,6 +27,7 @@ import type { PageData, Grove, Agent, Capabilities } from '../../shared/types.js
 import { can, canAny, getAgentDisplayStatus, isAgentRunning, isTerminalAvailable, isSharedWorkspace } from '../../shared/types.js';
 import type { StatusType } from '../shared/status-badge.js';
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import { stateManager } from '../../client/state.js';
 import '../shared/git-remote-display.js';
 import type { ViewMode } from '../shared/view-toggle.js';
@@ -655,6 +656,7 @@ export class ScionPageGroveDetail extends LitElement {
       }
 
       this.grove = (await groveResponse.json()) as Grove;
+      dispatchPageTitle(this, this.grove.name || this.groveId, 'Groves');
 
       if (agentsResponse.ok) {
         const agentsData = (await agentsResponse.json()) as

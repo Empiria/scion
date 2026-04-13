@@ -25,6 +25,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 
 import type { PageData } from '../../shared/types.js';
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import '../shared/schedule-list.js';
 
 interface Grove {
@@ -160,6 +161,7 @@ export class ScionPageGroveSchedules extends LitElement {
         throw new Error(await extractApiError(response, `HTTP ${response.status}`));
       }
       this.grove = (await response.json()) as Grove;
+      dispatchPageTitle(this, 'Schedules', this.grove.name || this.groveId);
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load grove';
     } finally {

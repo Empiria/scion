@@ -23,6 +23,7 @@
 import type { PageData, User } from '../shared/types.js';
 import { stateManager } from './state.js';
 import { debugLog } from './debug-log.js';
+import { setDocumentTitle } from './page-title.js';
 
 // Import Shoelace base path config (needed for icons).
 // Icons are copied to public/shoelace/ by scripts/copy-shoelace-icons.mjs
@@ -335,6 +336,7 @@ async function renderRoute(path: string): Promise<void> {
     activeShell = null;
     const page = document.createElement(tag);
     appContainer.appendChild(page);
+    setDocumentTitle(tag === 'scion-login-page' ? 'Login' : 'Page Not Found');
   } else if (activeShell) {
     // Reuse existing shell — just update properties and swap page content
     const shell = activeShell.element as HTMLElement & {

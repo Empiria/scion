@@ -27,6 +27,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { PageData, Agent, AgentPhase, AgentActivity } from '../../shared/types.js';
 import { isTerminalAvailable } from '../../shared/types.js';
 import { extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import { SSEClient } from '../../client/sse-client.js';
 import type { SSEUpdateEvent } from '../../client/sse-client.js';
 import type { StatusType } from '../shared/status-badge.js';
@@ -326,6 +327,7 @@ export class ScionPageTerminal extends LitElement {
       this.groveId = agent.groveId ?? '';
       this.agentPhase = agent.phase;
       this.agentActivity = agent.activity ?? '';
+      dispatchPageTitle(this, 'Terminal', agent.name || this.agentId);
       this.connectSSE();
 
       if (!isTerminalAvailable(agent)) {

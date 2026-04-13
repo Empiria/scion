@@ -27,6 +27,7 @@ import { customElement, state } from 'lit/decorators.js';
 import type { AdminGroup } from '../../shared/types.js';
 import '../shared/group-member-editor.js';
 import { extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 
 @customElement('scion-page-admin-group-detail')
 export class ScionPageAdminGroupDetail extends LitElement {
@@ -271,6 +272,7 @@ export class ScionPageAdminGroupDetail extends LitElement {
       }
 
       this.group = (await response.json()) as AdminGroup;
+      dispatchPageTitle(this, this.group.name || this.groupId, 'Groups');
     } catch (err) {
       console.error('Failed to load group:', err);
       this.error = err instanceof Error ? err.message : 'Failed to load group';

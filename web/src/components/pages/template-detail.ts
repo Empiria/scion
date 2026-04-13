@@ -27,6 +27,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { PageData, Template } from '../../shared/types.js';
 import { can } from '../../shared/types.js';
 import { apiFetch, extractApiError } from '../../client/api.js';
+import { dispatchPageTitle } from '../../client/page-title.js';
 import '../shared/file-browser.js';
 import '../shared/file-editor.js';
 import { TemplateFileBrowserDataSource } from '../shared/file-browser.js';
@@ -175,6 +176,7 @@ export class ScionPageTemplateDetail extends LitElement {
         throw new Error(await extractApiError(response, `HTTP ${response.status}`));
       }
       this.template = (await response.json()) as Template;
+      dispatchPageTitle(this, this.template.displayName || this.template.name || this.templateId, 'Templates');
 
       // Create data sources
       this.fileBrowserDataSource = new TemplateFileBrowserDataSource(this.templateId);

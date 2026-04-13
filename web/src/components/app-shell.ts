@@ -32,6 +32,8 @@ import './shared/debug-panel.js';
 
 import type { User } from '../shared/types.js';
 import type { AccessDeniedDetail } from '../client/api.js';
+import { setDocumentTitle, PAGE_TITLE_EVENT } from '../client/page-title.js';
+import type { PageTitleDetail } from '../client/page-title.js';
 
 /**
  * Page title configuration
@@ -69,8 +71,9 @@ export class ScionApp extends LitElement {
   @state()
   _drawerOpen = false;
 
-  /** Bound listener reference for cleanup */
+  /** Bound listener references for cleanup */
   private _accessDeniedHandler = this.handleAccessDenied.bind(this);
+  private _pageTitleHandler = this.handlePageTitle.bind(this);
 
   static override styles = css`
     :host {
@@ -182,11 +185,40 @@ export class ScionApp extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     window.addEventListener('scion:access-denied', this._accessDeniedHandler as EventListener);
+    this.addEventListener(PAGE_TITLE_EVENT, this._pageTitleHandler as EventListener);
+    this.updateDocumentTitle();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     window.removeEventListener('scion:access-denied', this._accessDeniedHandler as EventListener);
+    this.removeEventListener(PAGE_TITLE_EVENT, this._pageTitleHandler as EventListener);
+  }
+
+  override updated(changedProperties: Map<string, unknown>): void {
+    if (changedProperties.has('currentPath')) {
+      this.updateDocumentTitle();
+    }
+  }
+
+  /**
+   * Handle page-title events from detail page components to refine the
+   * document title with entity-specific context (grove name, agent name, etc.).
+   */
+  private handlePageTitle(event: CustomEvent<PageTitleDetail>): void {
+    const segments = event.detail?.segments;
+    if (segments && segments.length > 0) {
+      setDocumentTitle(...segments);
+    }
+  }
+
+  /**
+   * Set the document title from the current path-based page title.
+   * Detail page components will refine this further via scion:page-title events.
+   */
+  private updateDocumentTitle(): void {
+    const title = this.getPageTitle();
+    setDocumentTitle(title);
   }
 
   private handleAccessDenied(event: CustomEvent<AccessDeniedDetail>): void {
@@ -266,18 +298,38 @@ export class ScionApp extends LitElement {
     if (this.currentPath === '/groves/new') {
       return 'Create Grove';
     }
+    if (this.currentPath.match(/^\/groves\/[^/]+\/settings$/)) {
+      return 'Grove Settings';
+    }
+    if (this.currentPath.match(/^\/groves\/[^/]+\/schedules$/)) {
+      return 'Schedules';
+    }
+    if (this.currentPath.match(/^\/groves\/[^/]+\/templates\/[^/]+$/)) {
+      return 'Template';
+    }
     if (this.currentPath.startsWith('/groves/')) {
-      return 'Grove Details';
+      return 'Grove';
     }
     if (this.currentPath === '/agents/new') {
       return 'Create Agent';
     }
+    if (this.currentPath.match(/^\/agents\/[^/]+\/terminal$/)) {
+      return 'Terminal';
+    }
+    if (this.currentPath.match(/^\/agents\/[^/]+\/configure$/)) {
+      return 'Configure Agent';
+    }
     if (this.currentPath.startsWith('/agents/')) {
-      // Check if it's the terminal page
-      if (this.currentPath.includes('/terminal')) {
-        return 'Terminal';
-      }
-      return 'Agent Details';
+      return 'Agent';
+    }
+    if (this.currentPath.startsWith('/brokers/')) {
+      return 'Broker';
+    }
+    if (this.currentPath.match(/^\/admin\/groups\/[^/]+$/)) {
+      return 'Group';
+    }
+    if (this.currentPath === '/admin/maintenance') {
+      return 'Maintenance';
     }
 
     return 'Page Not Found';

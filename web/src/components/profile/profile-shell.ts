@@ -29,6 +29,7 @@ import '../shared/header.js';
 import '../shared/debug-panel.js';
 
 import type { User } from '../../shared/types.js';
+import { setDocumentTitle } from '../../client/page-title.js';
 
 const PROFILE_TITLES: Record<string, string> = {
   '/profile': 'Profile',
@@ -121,6 +122,17 @@ export class ScionProfileShell extends LitElement {
       flex-direction: column;
     }
   `;
+
+  override updated(changedProperties: Map<string, unknown>): void {
+    if (changedProperties.has('currentPath')) {
+      this.updateDocumentTitle();
+    }
+  }
+
+  private updateDocumentTitle(): void {
+    const title = this.getPageTitle();
+    setDocumentTitle(title, 'Profile');
+  }
 
   override render() {
     const pageTitle = this.getPageTitle();
