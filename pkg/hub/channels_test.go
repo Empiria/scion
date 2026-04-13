@@ -596,7 +596,8 @@ func TestDiscordChannel_TruncateLongMsg(t *testing.T) {
 
 func TestDiscordChannel_DeliverFailure(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusInternalServerError)
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte(`{"message":"You are being rate limited.","retry_after":1.5,"code":0}`))
 	}))
 	defer server.Close()
 
@@ -604,7 +605,18 @@ func TestDiscordChannel_DeliverFailure(t *testing.T) {
 	msg := messages.NewNotification("agent:worker", "user:alice", "completed", messages.TypeStateChange)
 	err := ch.Deliver(context.Background(), msg)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "500")
+	assert.Contains(t, err.Error(), "429")
+	// The response body should be surfaced so operators can see the reason.
+	assert.Contains(t, err.Error(), "rate limited")
+}
+
+func TestDiscordChannel_UserMentionLegacyNickForm(t *testing.T) {
+	// Discord historically wrapped nickname mentions as <@!ID>. The extractor
+	// must recognise both <@ID> and <@!ID>, but still ignore role mentions.
+	mention := "heads up <@!12345> and <@67890> (not <@&99999>)"
+	ids := extractDiscordUserIDs(mention)
+	assert.ElementsMatch(t, []string{"12345", "67890"}, ids)
+	assert.NotContains(t, ids, "99999")
 }
 
 func TestFormatDiscordPayload_URLRejectsSlackSuffix(t *testing.T) {

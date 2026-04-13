@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -139,8 +140,9 @@ type discordAllowedMentions struct {
 // reDiscordRole matches <@&NNN> role mentions.
 var reDiscordRole = regexp.MustCompile(`<@&(\d+)>`)
 
-// reDiscordUser matches <@NNN> user mentions (not <@&NNN>).
-var reDiscordUser = regexp.MustCompile(`<@(\d+)>`)
+// reDiscordUser matches <@NNN> and <@!NNN> user mentions (not <@&NNN>).
+// The optional `!` is the legacy nickname-mention form.
+var reDiscordUser = regexp.MustCompile(`<@!?(\d+)>`)
 
 // extractDiscordRoleIDs finds all <@&NNN> role mentions in s and returns the NNNs.
 func extractDiscordRoleIDs(s string) []string {
@@ -155,11 +157,10 @@ func extractDiscordRoleIDs(s string) []string {
 	return ids
 }
 
-// extractDiscordUserIDs finds all <@NNN> user mentions (not <@&NNN>) in s and returns the NNNs.
+// extractDiscordUserIDs finds all <@NNN> / <@!NNN> user mentions in s and returns the NNNs.
+// Role mentions (<@&NNN>) are not matched because `&` is not a digit.
 func extractDiscordUserIDs(s string) []string {
-	// Remove role mentions first so we don't match their digits.
-	stripped := reDiscordRole.ReplaceAllString(s, "")
-	matches := reDiscordUser.FindAllStringSubmatch(stripped, -1)
+	matches := reDiscordUser.FindAllStringSubmatch(s, -1)
 	if len(matches) == 0 {
 		return nil
 	}
@@ -266,7 +267,8 @@ func (d *DiscordChannel) Deliver(ctx context.Context, msg *messages.StructuredMe
 
 	// Discord returns 204 No Content on success; also accept 200 for test servers.
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("discord webhook returned status %d", resp.StatusCode)
+		resBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return fmt.Errorf("discord webhook returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(resBody)))
 	}
 
 	return nil
