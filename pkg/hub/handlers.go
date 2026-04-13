@@ -2045,8 +2045,17 @@ func (s *Server) handleAgentOutboundMessage(w http.ResponseWriter, r *http.Reque
 		s.messageLog.Debug("No message broker proxy available for outbound message",
 			"agent_id", agent.ID, "recipient_id", recipientID)
 		if s.channelRegistry != nil && s.channelRegistry.Len() > 0 {
-			// Fall back to external channels (Slack, webhook, email) when no broker is configured.
-			s.channelRegistry.Dispatch(ctx, structuredMsg)
+			// External channels (Slack, webhook, email, discord) only receive
+			// structured notification types — instruction, input-needed,
+			// state-change. Free-form reply types (e.g. "assistant-reply" emitted
+			// by the Claude Code hooks harness on every agent turn) stay in the
+			// message store / SSE inbox and do not spam the channel registry.
+			if err := messages.ValidateType(structuredMsg.Type); err == nil {
+				s.channelRegistry.Dispatch(ctx, structuredMsg)
+			} else {
+				s.messageLog.Debug("Skipping channel dispatch for non-notification message type",
+					"agent_id", agent.ID, "recipient_id", recipientID, "msg_type", structuredMsg.Type)
+			}
 		}
 	}
 
