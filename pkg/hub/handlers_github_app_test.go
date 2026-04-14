@@ -278,22 +278,8 @@ func TestHandleGroveGitHubStatus_PostWithInstallation(t *testing.T) {
 	srv, s := testServer(t)
 	ctx := context.Background()
 
-	grove := &store.Grove{
-		ID: "grove_gh_status_check2", Slug: "gh-status-check2", Name: "GH Status Check 2",
-		GitRemote: "https://github.com/acme/widgets",
-		Created:   time.Now(), Updated: time.Now(), Visibility: "private",
-	}
+	// Create the installation record first (grove has FK to installation)
 	instID := int64(77777)
-	grove.GitHubInstallationID = &instID
-	grove.GitHubAppStatus = &store.GitHubAppGroveStatus{
-		State:       store.GitHubAppStateUnchecked,
-		LastChecked: time.Now(),
-	}
-	if err := s.CreateGrove(ctx, grove); err != nil {
-		t.Fatalf("failed to create grove: %v", err)
-	}
-
-	// Create the installation record
 	inst := &store.GitHubInstallation{
 		InstallationID: instID,
 		AccountLogin:   "acme",
@@ -303,6 +289,20 @@ func TestHandleGroveGitHubStatus_PostWithInstallation(t *testing.T) {
 	}
 	if err := s.CreateGitHubInstallation(ctx, inst); err != nil {
 		t.Fatalf("failed to create installation: %v", err)
+	}
+
+	grove := &store.Grove{
+		ID: "grove_gh_status_check2", Slug: "gh-status-check2", Name: "GH Status Check 2",
+		GitRemote: "https://github.com/acme/widgets",
+		Created:   time.Now(), Updated: time.Now(), Visibility: "private",
+	}
+	grove.GitHubInstallationID = &instID
+	grove.GitHubAppStatus = &store.GitHubAppGroveStatus{
+		State:       store.GitHubAppStateUnchecked,
+		LastChecked: time.Now(),
+	}
+	if err := s.CreateGrove(ctx, grove); err != nil {
+		t.Fatalf("failed to create grove: %v", err)
 	}
 
 	// POST should succeed (though minting will fail because no GitHub App

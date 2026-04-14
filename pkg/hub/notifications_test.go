@@ -211,7 +211,7 @@ func setupNotificationTest(t *testing.T) *notificationTestEnv {
 		SubscriberID:      subscriber.Slug,
 		GroveID:           grove.ID,
 		TriggerActivities: []string{"COMPLETED", "WAITING_FOR_INPUT"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute), // Predate agent creation so the stale event filter doesn't skip test events
 		CreatedBy:         "test",
 	}
 	require.NoError(t, s.CreateNotificationSubscription(ctx, sub))
@@ -444,7 +444,7 @@ func TestNotificationDispatcher_UserSubscriber(t *testing.T) {
 		SubscriberID:      "user-123",
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute), // Predate agent creation so stale filter doesn't skip
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(context.Background(), userSub))
@@ -463,7 +463,7 @@ func TestNotificationDispatcher_UserSubscriber(t *testing.T) {
 	// But notification should be stored
 	notifs, err := env.store.GetNotifications(context.Background(), store.SubscriberTypeUser, "user-123", false)
 	require.NoError(t, err)
-	assert.Len(t, notifs, 1)
+	require.Len(t, notifs, 1)
 	assert.Equal(t, "COMPLETED", notifs[0].Status)
 }
 
@@ -636,7 +636,7 @@ func TestNotificationDispatcher_MultipleSubscribers(t *testing.T) {
 		SubscriberID:      "user-456",
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(context.Background(), userSub))
@@ -780,7 +780,7 @@ func TestNotificationDispatcher_StalledActivity(t *testing.T) {
 		SubscriberID:      env.subscriber.Slug,
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED", "WAITING_FOR_INPUT", "STALLED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(ctx, stalledSub))
@@ -820,7 +820,7 @@ func TestNotificationDispatcher_ErrorPhase(t *testing.T) {
 		SubscriberID:      env.subscriber.Slug,
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED", "ERROR"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(ctx, errorSub))
@@ -856,7 +856,7 @@ func TestNotificationDispatcher_BrokerRoutingOnUserNotification(t *testing.T) {
 		SubscriberID:      "user-broker",
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(context.Background(), userSub))
@@ -911,7 +911,7 @@ func TestNotificationDispatcher_FallbackToChannelWhenNoBroker(t *testing.T) {
 		SubscriberID:      "user-fallback",
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(context.Background(), userSub))
@@ -951,7 +951,7 @@ func TestNotificationDispatcher_ChannelDispatchOnUserNotification(t *testing.T) 
 		SubscriberID:      "user-123",
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(context.Background(), userSub))
@@ -1037,7 +1037,7 @@ func TestNotificationDispatcher_GroveScopedSubscription(t *testing.T) {
 		SubscriberID:      "grove-watcher",
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(ctx, groveSub))
@@ -1073,7 +1073,7 @@ func TestNotificationDispatcher_DeletedTrigger(t *testing.T) {
 		SubscriberID:      env.subscriber.Slug,
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED", "DELETED"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(ctx, deletedSub))
@@ -1230,7 +1230,7 @@ func TestNotificationDispatcher_DeduplicateAcrossScopes(t *testing.T) {
 		SubscriberID:      env.subscriber.Slug,
 		GroveID:           env.grove.ID,
 		TriggerActivities: []string{"COMPLETED", "WAITING_FOR_INPUT"},
-		CreatedAt:         time.Now(),
+		CreatedAt:         time.Now().Add(-time.Minute),
 		CreatedBy:         "test",
 	}
 	require.NoError(t, env.store.CreateNotificationSubscription(ctx, groveSub))

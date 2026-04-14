@@ -2211,8 +2211,9 @@ func TestUserList(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(resp.Users) != 1 {
-		t.Errorf("expected 1 user, got %d", len(resp.Users))
+	// Expect 2 users: the seeded dev user + the test-created user
+	if len(resp.Users) != 2 {
+		t.Errorf("expected 2 users, got %d", len(resp.Users))
 	}
 }
 

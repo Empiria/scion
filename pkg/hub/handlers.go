@@ -310,7 +310,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 	// Compute per-item and scope capabilities
 	identity := GetIdentityFromContext(ctx)
-	agents := make([]AgentWithCapabilities, len(result.Items))
+	agents := make([]AgentWithCapabilities, 0, len(result.Items))
 	if identity != nil {
 		resources := make([]Resource, len(result.Items))
 		for i := range result.Items {
@@ -318,11 +318,14 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		}
 		caps := s.authzService.ComputeCapabilitiesBatch(ctx, identity, resources, "agent")
 		for i := range result.Items {
-			agents[i] = AgentWithCapabilities{Agent: result.Items[i], Cap: caps[i]}
+			if !capabilityAllows(caps[i], ActionRead) {
+				continue
+			}
+			agents = append(agents, AgentWithCapabilities{Agent: result.Items[i], Cap: caps[i]})
 		}
 	} else {
 		for i := range result.Items {
-			agents[i] = AgentWithCapabilities{Agent: result.Items[i]}
+			agents = append(agents, AgentWithCapabilities{Agent: result.Items[i]})
 		}
 	}
 
@@ -331,10 +334,15 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		scopeCap = s.authzService.ComputeScopeCapabilities(ctx, identity, "", "", "agent")
 	}
 
+	totalCount := result.TotalCount
+	if identity != nil {
+		totalCount = len(agents)
+	}
+
 	writeJSON(w, http.StatusOK, ListAgentsResponse{
 		Agents:       agents,
 		NextCursor:   result.NextCursor,
-		TotalCount:   result.TotalCount,
+		TotalCount:   totalCount,
 		ServerTime:   time.Now().UTC(),
 		Capabilities: scopeCap,
 	})
@@ -3232,7 +3240,8 @@ func hubNativeGrovePath(slug string) (string, error) {
 
 // initHubNativeGrove initializes the filesystem workspace for a hub-native grove.
 // It creates the workspace directory and seeds the .scion project structure with
-// hub connection settings.
+// hub connection settings. Unlike regular projects, hub-native groves store
+// settings directly in the .scion directory (no split storage or marker files).
 func (s *Server) initHubNativeGrove(grove *store.Grove) error {
 	workspacePath, err := hubNativeGrovePath(grove.Slug)
 	if err != nil {
@@ -3244,8 +3253,22 @@ func (s *Server) initHubNativeGrove(grove *store.Grove) error {
 	}
 
 	scionDir := filepath.Join(workspacePath, ".scion")
-	if err := config.InitProject(scionDir, nil, config.InitProjectOpts{SkipRuntimeCheck: true}); err != nil {
-		return fmt.Errorf("failed to initialize .scion project: %w", err)
+	if err := os.MkdirAll(scionDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .scion directory: %w", err)
+	}
+
+	// Seed default settings.yaml directly in scionDir. Hub-native groves
+	// bypass InitProject (which uses split storage for git repos) and keep
+	// all configuration in-place.
+	settingsPath := filepath.Join(scionDir, "settings.yaml")
+	if _, err := os.Stat(settingsPath); os.IsNotExist(err) {
+		defaultSettings, err := config.GetGroveDefaultSettingsYAML()
+		if err != nil {
+			return fmt.Errorf("failed to read default grove settings: %w", err)
+		}
+		if err := os.WriteFile(settingsPath, defaultSettings, 0644); err != nil {
+			return fmt.Errorf("failed to seed settings.yaml: %w", err)
+		}
 	}
 
 	// Write hub connection settings into the seeded settings file.
@@ -5827,10 +5850,15 @@ func (s *Server) listUsers(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	totalCount := result.TotalCount
+	if identity != nil {
+		totalCount = len(users)
+	}
+
 	writeJSON(w, http.StatusOK, ListUsersResponse{
 		Users:      users,
 		NextCursor: result.NextCursor,
-		TotalCount: result.TotalCount,
+		TotalCount: totalCount,
 	})
 }
 
@@ -6072,20 +6100,23 @@ func (s *Server) resolveEnvSecretAccess(w http.ResponseWriter, r *http.Request, 
 		return "", false
 
 	case store.ScopeHub:
-		// Hub scope: only admin users can read or write.
-		// Agent environment injection is handled internally via Resolve(),
-		// which filters out internal secrets. Direct API access to hub-scoped
-		// secrets requires hub admin privileges.
+		// Hub scope: admin users can read and write; agents can read only.
 		identity := GetIdentityFromContext(ctx)
 		if identity == nil {
 			Unauthorized(w)
 			return "", false
 		}
+		if _, ok := identity.(AgentIdentity); ok {
+			if isWrite {
+				Forbidden(w)
+				return "", false
+			}
+			return s.hubID, true
+		}
 		userIdent, ok := identity.(UserIdentity)
 		if !ok {
-			// Non-user identities (agents, brokers) cannot access hub-scoped
-			// secrets directly. Secret injection is handled server-side via
-			// the Resolve() path during agent dispatch.
+			// Non-user, non-agent identities (brokers) cannot access hub-scoped
+			// secrets directly.
 			Forbidden(w)
 			return "", false
 		}

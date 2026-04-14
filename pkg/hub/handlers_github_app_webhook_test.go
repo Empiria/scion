@@ -407,6 +407,9 @@ func TestMatchGrovesToInstallation(t *testing.T) {
 		AccountLogin:   "acme",
 		Repositories:   []string{"acme/widgets", "acme/api"},
 	}
+	if err := s.CreateGitHubInstallation(ctx, installation); err != nil {
+		t.Fatalf("failed to create installation: %v", err)
+	}
 
 	matched := srv.matchGrovesToInstallation(ctx, installation)
 
@@ -442,6 +445,16 @@ func TestMatchGrovesToInstallation_SkipsAlreadyAssociated(t *testing.T) {
 	ctx := context.Background()
 
 	otherInstallation := int64(99999)
+
+	// Create the referenced installation so the grove FK is satisfied
+	if err := s.CreateGitHubInstallation(ctx, &store.GitHubInstallation{
+		InstallationID: otherInstallation,
+		AccountLogin:   "other-org",
+		Status:         store.GitHubInstallationStatusActive,
+	}); err != nil {
+		t.Fatalf("failed to create installation: %v", err)
+	}
+
 	grove := &store.Grove{
 		ID:                   "g1",
 		Name:                 "G1",
