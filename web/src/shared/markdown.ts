@@ -39,6 +39,8 @@ async function loadRenderer(): Promise<MarkdownRenderer> {
 
       return {
         render(markdown: string): string {
+          // marked's overload for { async: false } already returns string, so
+          // no cast is needed here (verified by tsc + typed lint).
           const rawHtml = marked.parse(markdown, { async: false });
           return purify.sanitize(rawHtml);
         },

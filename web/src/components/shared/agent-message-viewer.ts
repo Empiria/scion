@@ -64,8 +64,34 @@ interface ParsedMessage {
   urgent: boolean;
   broadcasted: boolean;
   timestamp: string;
+  /** Epoch ms of `timestamp`, derived once at parse time. Used for sorting so
+   *  `rebuildMessages` (called per streamed message) never re-parses dates. */
+  sortKey: number;
+  /** Pre-formatted date/time strings, derived once at parse time so the message
+   *  list does not re-run Intl formatting on every render (e.g. each keystroke
+   *  in the compose box, which re-renders the component). */
+  dateStr: string;
+  timeStr: string;
   insertId: string;
   raw: MessageLogEntry | null;
+}
+
+/**
+ * Derive the cached sort key and display strings from a message timestamp.
+ * Computed once per message at parse time rather than on every render/compare.
+ */
+function deriveTimeFields(timestamp: string): {
+  sortKey: number;
+  dateStr: string;
+  timeStr: string;
+} {
+  const d = new Date(timestamp);
+  const ms = d.getTime();
+  return {
+    sortKey: Number.isNaN(ms) ? 0 : ms,
+    dateStr: d.toLocaleDateString('en', { year: 'numeric', month: 'short', day: 'numeric' }),
+    timeStr: d.toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit' }),
+  };
 }
 
 const MAX_BUFFER = 500;
@@ -637,6 +663,7 @@ export class ScionAgentMessageViewer extends LitElement {
       urgent: msg.urgent ?? false,
       broadcasted: msg.broadcasted ?? false,
       timestamp: msg.createdAt,
+      ...deriveTimeFields(msg.createdAt),
       insertId: `hub:${msg.id}`,
       raw: null,
     };
@@ -699,6 +726,7 @@ export class ScionAgentMessageViewer extends LitElement {
       urgent,
       broadcasted,
       timestamp: entry.timestamp,
+      ...deriveTimeFields(entry.timestamp),
       insertId: entry.insertId,
       raw: entry,
     };
@@ -717,9 +745,7 @@ export class ScionAgentMessageViewer extends LitElement {
 
   /** Sort buffered messages oldest-first and evict the oldest beyond MAX_BUFFER. */
   private rebuildMessages(): void {
-    const sorted = Array.from(this.entryMap.values()).sort(
-      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-    );
+    const sorted = Array.from(this.entryMap.values()).sort((a, b) => a.sortKey - b.sortKey);
 
     if (sorted.length > MAX_BUFFER) {
       // Drop the oldest (front) entries.
@@ -1072,23 +1098,15 @@ export class ScionAgentMessageViewer extends LitElement {
     let lastDate = '';
 
     for (const msg of this.messages) {
-      const d = new Date(msg.timestamp);
-      const dateStr = d.toLocaleDateString('en', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
+      // dateStr/timeStr are pre-computed at parse time (see deriveTimeFields)
+      // so this loop stays allocation-free on re-render.
+      const { dateStr, timeStr } = msg;
 
       if (dateStr !== lastDate) {
         lastDate = dateStr;
         rows.push(html`<div class="date-divider">${dateStr}</div>`);
       }
 
-      const timeStr = d.toLocaleTimeString('en', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-      });
       const isExpanded = this.expandedIds.has(msg.insertId);
       const isProjectView = !this.agentId;
       const isUser = !isProjectView && msg.direction === 'received';
